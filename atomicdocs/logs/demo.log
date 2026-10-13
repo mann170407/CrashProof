@@ -1,0 +1,31 @@
+== 1. Commit version 1
+1
+Quarterly report v1: revenue 100
+
+== 2. Write version 2 but CRASH halfway through the data file (torn write)
+   process died with exit code 137
+   files on disk right after the crash:
+   total 38
+   drwxr-xr-x 1 Mann 197121     0 Oct 13 10:22 .
+   drwxr-xr-x 1 Mann 197121     0 Oct 13 10:22 ..
+   -rw-r--r-- 1 Mann 197121     0 Oct 13 10:22 .lock
+   -rw-r--r-- 1 Mann 197121 33034 Oct 13 10:22 .v000002.dat.4160.1c5d695d.tmp
+   -rw-r--r-- 1 Mann 197121    91 Oct 13 10:22 CURRENT
+   -rw-r--r-- 1 Mann 197121   101 Oct 13 10:22 v000001.dat
+
+== 3. Reopen -> recovery rolls the torn write back
+{"rolled_forward": [], "rolled_back": ["report"], "tmp_removed": 1, "journal": "ok", "journal_bytes_dropped": 0, "fell_back": [], "degraded": [], "docs_checked": 1, "ms": 80.95}
+Quarterly report v1: revenue 100
+
+== 4. Write version 2 and CRASH right after the commit point (before COMMIT is logged)
+   process died with exit code 137
+
+== 5. Reopen -> recovery rolls forward to the new version
+{"rolled_forward": ["report"], "rolled_back": [], "tmp_removed": 0, "journal": "ok", "journal_bytes_dropped": 0, "fell_back": [], "degraded": [], "docs_checked": 1, "ms": 121.29}
+Quarterly report v2: revenue 250 Quarterly report v2: revenue 250 Quar ...
+   (byte-for-byte identical to v2)
+{'version': 1, 'bytes': 33, 'valid': True, 'current': False}
+{'version': 2, 'bytes': 66001, 'valid': True, 'current': True}
+
+== 6. Same torn write against a naive in-place writer
+   naive file is now 33000 bytes of a 66001-byte document: neither v1 nor v2

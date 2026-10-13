@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+/* Fonts are bundled (offline venue): Inter Variable + JetBrains Mono. */
+@import "@fontsource-variable/inter";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/jetbrains-mono/800.css";
+/* Midday-style look (preview on the Live editor scene): Hedvig Letters serif + sans */
+@import "@fontsource/hedvig-letters-serif/400.css";
+@import "@fontsource/hedvig-letters-sans/400.css";
+
+@theme {
+  --font-sans: "Inter Variable", "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", monospace;
+
+  /* surfaces: near-black ladder (projectors crush blacks, so steps are wider than on a monitor) */
+  /* neutral (Midday-style) ladder: no blue tint */
+  --color-ink-950: #0d0d0d;
+  --color-ink-900: #111111;
+  --color-ink-850: #151515;
+  --color-ink-800: #1a1a1a;
+  --color-ink-700: #222222;
+  --color-ink-600: #2e2e2e;
+  --color-line: rgb(255 255 255 / 0.08);
+  --color-line-strong: rgb(255 255 255 / 0.16);
+
+  /* square corners everywhere (rounded-full dots stay round) */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
+
+  /* text */
+  --color-fg: #fafafa;
+  --color-fg-2: #a3a3a3;
+  --color-fg-3: #737373;
+
+  /* data identity (validated, CVD-safe with secondary encoding): A blue, B amber, corrupt rose + ✗ */
+  --color-va: #3b93f5;
+  --color-vb: #cc7e14;
+  --color-vx: #f0436a;
+  --color-va-text: #8cc2ff;
+  --color-vb-text: #ffc266;
+  --color-vx-text: #ff8fa8;
+  --color-vc: #c065f0;
+  --color-vc-text: #e0a8ff;
+
+  /* roles */
+  --color-brand: #8b7bff;      /* writer lane, brand */
+  --color-commit: #b9a8ff;     /* the commit point glow */
+  --color-recover: #2dd4bf;    /* recovery lane */
+  --color-reader: #f472b6;
+  --color-pass: #3ddc97;
+  --color-fail: #ff5d73;
+  --color-warn: #ffb547;
+
+  /* Midday-style palette: neutral black, hairlines, square corners, almost no accent */
+  --font-serif: "Hedvig Letters Serif", Georgia, "Times New Roman", serif;
+  --font-hedvig: "Hedvig Letters Sans", system-ui, sans-serif;
+  --color-md-bg: #0d0d0d;
+  --color-md-panel: #121212;
+  --color-md-fg: #fafafa;
+  --color-md-2: #a3a3a3;
+  --color-md-3: #6b6b6b;
+  --color-md-line: #1f1f1f;
+  --color-md-line-2: #2e2e2e;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-quart: cubic-bezier(0.76, 0, 0.24, 1);
+
+  --animate-sweep: sweep 1.6s var(--ease-in-out-quart) infinite;
+  --animate-blink: blink 1.1s steps(2, start) infinite;
+
+  @keyframes sweep {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  @keyframes blink {
+    to { visibility: hidden; }
+  }
+}
+
+/*
+ * Projection scale: 1rem = 20px at 1920x1080 (body >= 20px), scales down to laptops
+ * and up to 4K. Everything is in rem, so the whole deck scales as one.
+ */
+html {
+  font-size: clamp(12px, min(1.0417vw, 1.852vh), 40px);
+  background: var(--color-ink-950);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01", "ss03";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+body {
+  margin: 0;
+  background: var(--color-ink-950);
+  overflow: hidden;
+}
+#root {
+  height: 100dvh;
+  width: 100vw;
+}
+@media (max-width: 760px) {
+  html { font-size: 14px; }
+  body { overflow: auto; }
+}
+
+::selection { background: rgb(255 255 255 / 0.2); }
+
+.mono { font-family: var(--font-mono); font-feature-settings: "zero"; }
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* scrollbars that disappear on a projector */
+.scroll-quiet { scrollbar-width: thin; scrollbar-color: var(--color-ink-600) transparent; }
+.scroll-quiet::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll-quiet::-webkit-scrollbar-thumb { background: var(--color-ink-600); border-radius: 8px; }
+
+/* subtle film grain + vignette for every scene */
+.scene-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    none;
+}
+
+/* hatching = secondary encoding for "corrupt" (never colour alone) */
+.hatch-x {
+  background-image: repeating-linear-gradient(45deg, rgb(240 67 106 / 0.55) 0 3px, transparent 3px 9px);
+}
+
+/* dashed "page cache" look for non-durable files */
+.volatile {
+  border-style: dashed !important;
+}
+
+@keyframes dot-in {
+  0% { transform: scale(0); opacity: 0; }
+  70% { transform: scale(1.25); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dot-in 0.45s var(--ease-out-expo) both;
+}
+
+.glow-commit {
+  box-shadow: 0 0 0 1px rgb(185 168 255 / 0.6), 0 0 32px 4px rgb(139 123 255 / 0.45);
+}
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: 0.7em;
+  padding: 0.1em 0.45em;
+  border-radius: 0;
+  border: 1px solid var(--color-md-line-2);
+  background: var(--color-md-panel);
+  color: var(--color-md-2);
+}
+
+input[type="range"].scrub {
+  appearance: none;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--color-ink-700);
+  outline: none;
+}
+input[type="range"].scrub::-webkit-slider-thumb {
+  appearance: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  background: var(--color-fg);
+  box-shadow: 0 0 0 4px rgb(139 123 255 / 0.45);
+  cursor: pointer;
+}
+input[type="range"].scrub::-moz-range-thumb {
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-fg);
+  box-shadow: 0 0 0 4px rgb(139 123 255 / 0.45);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-commit);
+  outline-offset: 2px;
+}
+/* a text surface the user is typing in shows its caret, not a ring */
+.no-ring:focus-visible { outline: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

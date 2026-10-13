@@ -1,0 +1,88 @@
+KO-04-C3 Retention under read pressure  (python 3.13.5, win32)
+
+== PART A - paused reader of v1 while a writer creates v2..v6 (KEEP_VERSIONS=3, READ_RETRIES=5)
+   after v1 (store C:\Users\Mann\AppData\Local\Temp\ko04-c3a-sgspumss/store):
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2d0526bcc213ea6ba732a7ddf7ed4714b952bf0063bff8d2bf166a69698e398b fbae0f7c
+     v000001.dat                      1283 B
+     journal.wal: empty [ok]
+
+== A1  reader read CURRENT -> v1 and is now PAUSED before opening v000001.dat
+
+== A2  writer saves v2..v6 while the reader sleeps
+   save v2 committed -> on disk: v1 v2        (2 version files)
+   save v3 committed -> on disk: v1 v2 v3     (3 version files)
+   save v4 committed -> on disk: v2 v3 v4     (3 version files)   GC removed v1
+   save v5 committed -> on disk: v3 v4 v5     (3 version files)   GC removed v2
+   save v6 committed -> on disk: v4 v5 v6     (3 version files)   GC removed v3
+   PASS retention: never more than 3 version files after a save's GC  - max seen 3
+   PASS v1 removed exactly when v4 committed (GC deletes v <= current-3)  - v1 gone after save v4
+   PASS reader still paused during all saves (it read CURRENT before any of them)
+
+== A3  release the reader
+   attempt 0: CURRENT -> v1  -> open v000001.dat: FileNotFoundError (GC'd), retry
+   attempt 1: CURRENT -> v6  -> open v000006.dat: OK, SHA-256 verified
+   reader returned: 1215B 'VERSION 000006|<0000'...
+   PASS reader got a whole committed version: v6 exactly (no error, no mix)
+   PASS retry was bounded: 2 attempts used (<= READ_RETRIES=5)
+   PASS at the end exactly v4, v5, v6 on disk, no temp files  - v4 v5 v6
+   final state of part A:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 6 a6dcdcf16999d2db25b793b5b9cc30bef3b46e3bc0885854d364dc3bce106bb4 b33b7b7a
+     v000004.dat                      1283 B
+     v000005.dat                      1283 B
+     v000006.dat                      1283 B
+     journal.wal: BEGIN(v1->v2), COMMIT(), BEGIN(v2->v3), COMMIT(), BEGIN(v3->v4), COMMIT(), BEGIN(v4->v5), COMMIT(), BEGIN(v5->v6), COMMIT() [ok]
+
+== A4  trade-off: a reader that ALREADY OPENED its version file is not hurt by GC
+   opened v4, read 100 B, writer committed v7 (GC unlinked v4: on disk now v5 v6 v7)
+   then read the remaining 1183 B through the still-open handle: SHA-256 verifies
+   PASS open handle survives GC unlink (POSIX unlink / Windows FILE_SHARE_DELETE)
+
+== PART B - the bound: a reader whose version is GC'd before EVERY open
+   attempt 0: CURRENT -> v1  | meanwhile writers commit v2 v3 v4 | on disk v2 v3 v4 -> open v1: gone
+   attempt 1: CURRENT -> v4  | meanwhile writers commit v5 v6 v7 | on disk v5 v6 v7 -> open v4: gone
+   attempt 2: CURRENT -> v7  | meanwhile writers commit v8 v9 v10 | on disk v8 v9 v10 -> open v7: gone
+   attempt 3: CURRENT -> v10 | meanwhile writers commit v11 v12 v13 | on disk v11 v12 v13 -> open v10: gone
+   attempt 4: CURRENT -> v13 | meanwhile writers commit v14 v15 v16 | on disk v14 v15 v16 -> open v13: gone
+   get() raised: ReadContention: 'hot': version removed by GC 5 times in a row  (after 413 ms)
+   PASS ReadContention raised after exactly READ_RETRIES=5 attempts (no infinite loop)
+   PASS each retry re-read CURRENT and saw a NEWER version (v1, v4, v7, ...)
+   PASS retention still bounded while the reader starved: 3 version files on disk  - v14 v15 v16
+   PASS once the pressure stops, a normal get() returns the newest version v16 whole
+
+== PART C - stress: 4 reader threads looping get() vs a writer doing 200 saves
+   readers sleep 0-2 ms between CURRENT read and open; 5% of reads are 'preempted'
+   there until 3 newer versions have committed (so their version is surely GC'd)
+   writer: 200 saves in 4.4 s (22.1 ms/save, each = 6+ flushes)
+   readers: 2815 reads (149 preempted), 145 retries after a GC'd version, 0 ReadContention,
+            0 bad reads, 0 errors; max attempts used by a single get(): 2 of 5
+   directory sampled 4080 times; version-file count histogram: {1: 19, 2: 21, 3: 1810, 4: 2230}; max temp files: 1
+   (3 = steady state; 4 appears only inside a save: new version renamed in, or the
+    commit done and the oldest version not yet unlinked - GC runs right after the commit)
+   PASS every read returned a whole committed version (tag + full body verified)  - errors=[]
+   PASS reads are monotonic per reader (never went back to an older version)
+   PASS GC'd-version retries happened and were absorbed within the bound (no ReadContention)  - 145 retries, max 2 attempts per get
+   PASS disk never held more than KEEP_VERSIONS+1 = 4 version files, temp files <= 2  - max 4 version files, 1 temp
+   PASS at the end: exactly the newest 3 versions, CURRENT=v201  - v199 v200 v201
+
+== HOW IT WORKS (OS mechanism)
+   Version files are immutable (copy-on-write): a reader never needs a lock, it reads
+     CURRENT (atomically replaced by rename), then opens that version and checks SHA-256.
+   GC runs only AFTER the new CURRENT is durable and deletes only v <= current-3,
+     so the committed version and its predecessors are never touched; disk usage is
+     bounded at 3 versions (+1 transiently inside a save).
+   The only race is the window between reading CURRENT and opening the file. Losing it
+     means FileNotFoundError, which proves a newer version committed -> re-read CURRENT.
+   Retries are bounded (READ_RETRIES=5); a reader that keeps losing gets ReadContention
+     instead of looping forever, and writers are never blocked to protect slow readers.
+   Once a reader has OPENED the file it is safe: POSIX unlink only removes the name, the
+     inode lives until the last close; on Windows reads open with FILE_SHARE_DELETE so
+     DeleteFile succeeds and the open handle keeps reading (A4).
+   Trade-off: we chose bounded retention + retry over pinning versions for readers
+     (leases/refcounts), which would let one stuck reader grow disk usage without bound.
+   Assumption: version numbers are never reused, so a stale name can never resolve to
+     different content; any mix would be caught by the SHA-256 check anyway.
+   elapsed 5.3 s
+
+KO-04-C3 Retention under read pressure: 16/16 checks passed -> PASS

@@ -1,0 +1,431 @@
+{
+ "ours_W1_small": {
+  "OLD": 16,
+  "NEW": 3,
+  "CORRUPT": 0,
+  "ERROR": 0,
+  "DURABILITY_VIOLATION": 0,
+  "DEAD": 0,
+  "states": 19,
+  "checks": 113,
+  "crash_points": 15,
+  "micro_ops": 22,
+  "mode": "exhaustive"
+ },
+ "trace_ours": [
+  {
+   "after": "start",
+   "k": 0,
+   "acked": false,
+   "OLD": 1,
+   "NEW": 0,
+   "BAD": 0,
+   "states": 1,
+   "optional": 0
+  },
+  {
+   "after": "write 172B journal.wal",
+   "k": 2,
+   "acked": false,
+   "OLD": 4,
+   "NEW": 0,
+   "BAD": 0,
+   "states": 4,
+   "optional": 2
+  },
+  {
+   "after": "fsync journal.wal",
+   "k": 3,
+   "acked": false,
+   "OLD": 1,
+   "NEW": 0,
+   "BAD": 0,
+   "states": 1,
+   "optional": 0
+  },
+  {
+   "after": "create .v000003.dat.29548.e3e96f1d.tmp",
+   "k": 5,
+   "acked": false,
+   "OLD": 4,
+   "NEW": 0,
+   "BAD": 0,
+   "states": 4,
+   "optional": 2
+  },
+  {
+   "after": "write 1368B .v000003.dat.29548.e3e96f1d.tmp",
+   "k": 9,
+   "acked": false,
+   "OLD": 64,
+   "NEW": 0,
+   "BAD": 0,
+   "states": 64,
+   "optional": 6
+  },
+  {
+   "after": "fsync .v000003.dat.29548.e3e96f1d.tmp",
+   "k": 10,
+   "acked": false,
+   "OLD": 2,
+   "NEW": 0,
+   "BAD": 0,
+   "states": 2,
+   "optional": 1
+  },
+  {
+   "after": "rename .v000003.dat.29548.e3e96f1d.tmp -> v000003.dat",
+   "k": 11,
+   "acked": false,
+   "OLD": 4,
+   "NEW": 0,
+   "BAD": 0,
+   "states": 4,
+   "optional": 2
+  },
+  {
+   "after": "fsync dir report",
+   "k": 12,
+   "acked": false,
+   "OLD": 1,
+   "NEW": 0,
+   "BAD": 0,
+   "states": 1,
+   "optional": 0
+  },
+  {
+   "after": "create .CURRENT.29548.b8dd0e6d.tmp",
+   "k": 14,
+   "acked": false,
+   "OLD": 4,
+   "NEW": 0,
+   "BAD": 0,
+   "states": 4,
+   "optional": 2
+  },
+  {
+   "after": "write 91B .CURRENT.29548.b8dd0e6d.tmp",
+   "k": 16,
+   "acked": false,
+   "OLD": 16,
+   "NEW": 0,
+   "BAD": 0,
+   "states": 16,
+   "optional": 4
+  },
+  {
+   "after": "fsync .CURRENT.29548.b8dd0e6d.tmp",
+   "k": 17,
+   "acked": false,
+   "OLD": 2,
+   "NEW": 0,
+   "BAD": 0,
+   "states": 2,
+   "optional": 1
+  },
+  {
+   "after": "rename .CURRENT.29548.b8dd0e6d.tmp -> CURRENT",
+   "k": 18,
+   "acked": false,
+   "OLD": 2,
+   "NEW": 2,
+   "BAD": 0,
+   "states": 4,
+   "optional": 2
+  },
+  {
+   "after": "fsync dir report",
+   "k": 19,
+   "acked": false,
+   "OLD": 0,
+   "NEW": 1,
+   "BAD": 0,
+   "states": 1,
+   "optional": 0
+  },
+  {
+   "after": "write 69B journal.wal",
+   "k": 21,
+   "acked": false,
+   "OLD": 0,
+   "NEW": 4,
+   "BAD": 0,
+   "states": 4,
+   "optional": 2
+  },
+  {
+   "after": "fsync journal.wal",
+   "k": 22,
+   "acked": true,
+   "OLD": 0,
+   "NEW": 1,
+   "BAD": 0,
+   "states": 1,
+   "optional": 0
+  }
+ ],
+ "ours_W0_small": {
+  "OLD": 17,
+  "NEW": 6,
+  "CORRUPT": 0,
+  "ERROR": 0,
+  "DURABILITY_VIOLATION": 0,
+  "DEAD": 0,
+  "states": 23,
+  "checks": 129,
+  "crash_points": 15,
+  "micro_ops": 25,
+  "mode": "exhaustive"
+ },
+ "ours_first_put": {
+  "OLD": 13,
+  "NEW": 7,
+  "CORRUPT": 0,
+  "ERROR": 0,
+  "DURABILITY_VIOLATION": 0,
+  "DEAD": 0,
+  "states": 20,
+  "checks": 116,
+  "crash_points": 17,
+  "micro_ops": 24,
+  "mode": "exhaustive"
+ },
+ "ours_gc": {
+  "OLD": 16,
+  "NEW": 4,
+  "CORRUPT": 0,
+  "ERROR": 0,
+  "DURABILITY_VIOLATION": 0,
+  "DEAD": 0,
+  "states": 20,
+  "checks": 116,
+  "crash_points": 17,
+  "micro_ops": 24,
+  "mode": "exhaustive"
+ },
+ "ours_two_puts": {
+  "OLD": 12,
+  "NEW": 18,
+  "CORRUPT": 0,
+  "ERROR": 0,
+  "DURABILITY_VIOLATION": 0,
+  "DEAD": 0,
+  "states": 30,
+  "checks": 164,
+  "crash_points": 31,
+  "micro_ops": 44,
+  "mode": "exhaustive"
+ },
+ "ours_W1_large": {
+  "OLD": 118,
+  "NEW": 3,
+  "CORRUPT": 0,
+  "ERROR": 0,
+  "DURABILITY_VIOLATION": 0,
+  "DEAD": 0,
+  "states": 121,
+  "checks": 305,
+  "crash_points": 15,
+  "micro_ops": 61,
+  "mode": "exhaustive/sampled"
+ },
+ "ours_W0_large": {
+  "OLD": 119,
+  "NEW": 6,
+  "CORRUPT": 0,
+  "ERROR": 0,
+  "DURABILITY_VIOLATION": 0,
+  "DEAD": 0,
+  "states": 125,
+  "checks": 321,
+  "crash_points": 15,
+  "micro_ops": 64,
+  "mode": "exhaustive/sampled"
+ },
+ "naive_nofsync": {
+  "OLD": 1,
+  "NEW": 1,
+  "CORRUPT": 11,
+  "DURABILITY_VIOLATION": 12,
+  "states": 13
+ },
+ "trace_naive": [
+  {
+   "after": "start",
+   "k": 0,
+   "acked": false,
+   "OLD": 1,
+   "NEW": 0,
+   "BAD": 0,
+   "states": 1,
+   "optional": 0
+  },
+  {
+   "after": "open O_TRUNC report.txt",
+   "k": 1,
+   "acked": false,
+   "OLD": 1,
+   "NEW": 0,
+   "BAD": 1,
+   "states": 2,
+   "optional": 1
+  },
+  {
+   "after": "write 1300B report.txt",
+   "k": 5,
+   "acked": true,
+   "OLD": 2,
+   "NEW": 2,
+   "BAD": 28,
+   "states": 32,
+   "optional": 5
+  }
+ ],
+ "naive_fsync": {
+  "OLD": 1,
+  "NEW": 1,
+  "CORRUPT": 11,
+  "DURABILITY_VIOLATION": 0,
+  "states": 13
+ },
+ "crash_then_recovery": [
+  {
+   "point": "after_begin",
+   "served": "OLD",
+   "states": 5,
+   "bad": 0,
+   "flipped_after_served": 0
+  },
+  {
+   "point": "torn_data",
+   "served": "OLD",
+   "states": 6,
+   "bad": 0,
+   "flipped_after_served": 0
+  },
+  {
+   "point": "before_data_fsync",
+   "served": "OLD",
+   "states": 14,
+   "bad": 0,
+   "flipped_after_served": 0
+  },
+  {
+   "point": "after_data_rename",
+   "served": "OLD",
+   "states": 6,
+   "bad": 0,
+   "flipped_after_served": 0
+  },
+  {
+   "point": "torn_pointer",
+   "served": "OLD",
+   "states": 8,
+   "bad": 0,
+   "flipped_after_served": 0
+  },
+  {
+   "point": "before_pointer_rename",
+   "served": "OLD",
+   "states": 8,
+   "bad": 0,
+   "flipped_after_served": 0
+  },
+  {
+   "point": "after_pointer_rename",
+   "served": "NEW",
+   "states": 7,
+   "bad": 0,
+   "flipped_after_served": 0
+  },
+  {
+   "point": "after_commit",
+   "served": "NEW",
+   "states": 5,
+   "bad": 0,
+   "flipped_after_served": 0
+  }
+ ],
+ "mutations": {
+  "data_fsync": {
+   "OLD": 72,
+   "NEW": 3,
+   "CORRUPT": 0,
+   "ERROR": 0,
+   "DURABILITY_VIOLATION": 8,
+   "DEAD": 0,
+   "states": 75,
+   "checks": 1258,
+   "crash_points": 14,
+   "micro_ops": 21,
+   "mode": "exhaustive"
+  },
+  "data_dirsync": {
+   "OLD": 24,
+   "NEW": 3,
+   "CORRUPT": 0,
+   "ERROR": 0,
+   "DURABILITY_VIOLATION": 0,
+   "DEAD": 0,
+   "states": 27,
+   "checks": 190,
+   "crash_points": 14,
+   "micro_ops": 21,
+   "mode": "exhaustive"
+  },
+  "ptr_fsync": {
+   "OLD": 16,
+   "NEW": 9,
+   "CORRUPT": 0,
+   "ERROR": 0,
+   "DURABILITY_VIOLATION": 0,
+   "DEAD": 0,
+   "states": 25,
+   "checks": 181,
+   "crash_points": 14,
+   "micro_ops": 21,
+   "mode": "exhaustive"
+  },
+  "ptr_dirsync": {
+   "OLD": 20,
+   "NEW": 3,
+   "CORRUPT": 0,
+   "ERROR": 0,
+   "DURABILITY_VIOLATION": 2,
+   "DEAD": 0,
+   "states": 23,
+   "checks": 127,
+   "crash_points": 14,
+   "micro_ops": 21,
+   "mode": "exhaustive"
+  },
+  "journal_fsync": {
+   "OLD": 42,
+   "NEW": 7,
+   "CORRUPT": 0,
+   "ERROR": 0,
+   "DURABILITY_VIOLATION": 0,
+   "DEAD": 0,
+   "states": 49,
+   "checks": 429,
+   "crash_points": 13,
+   "micro_ops": 20,
+   "mode": "exhaustive"
+  },
+  "data_fsync+no_checksums": {
+   "OLD": 63,
+   "NEW": 3,
+   "CORRUPT": 9,
+   "ERROR": 0,
+   "DURABILITY_VIOLATION": 5,
+   "DEAD": 0,
+   "states": 75,
+   "checks": 1258,
+   "crash_points": 14,
+   "micro_ops": 21,
+   "mode": "exhaustive"
+  }
+ },
+ "seconds": 41.1,
+ "total_states": 417
+}

@@ -1,0 +1,130 @@
+KO-04-C2 Lost-update rejection  (python 3.13.5, win32, N=12 client processes)
+
+== PART A - the organisers' scenario, two client processes via the real CLI
+   store: C:\Users\Mann\AppData\Local\Temp\ko04-c2a-wpw1v1ro/store   document: 'plan'
+   setup  $ atomicdocs.py put plan - --expect 0   <- A   => v1 (rc=0)
+   on disk after v1:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 774c471337c14a7e82d0f2fec04e28b59f670c01deff41b5b1abe3d6392e271d 0d00a2b1
+     v000001.dat                        94 B
+     journal.wal: BEGIN(v0->v1), COMMIT() [ok]
+
+== A1  both clients read the document (each is its own process)
+   client1 read: version 1  body 26B 'A|owner=alice;status=draft'
+   client2 read: version 1  body 26B 'A|owner=alice;status=draft'
+   PASS both clients saw v1 = A
+
+== A2  client1 commits B with --expect 1
+   $ atomicdocs.py put plan - --expect 1   <- B   => rc=0 stdout='2'
+   PASS client1 CAS succeeds and creates v2
+   on disk after client1:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 2 27879048e1b5677f40734496367cc1bba1db0ee9978811d9158bcb52642fa954 f6dacd52
+     v000001.dat                        94 B
+     v000002.dat                        95 B
+     journal.wal: BEGIN(v1->v2), COMMIT() [ok]
+   journal now: [('BEGIN', 'plan', 1, 2, '21252-1-c6392c'), ('COMMIT', None, None, None, '21252-1-c6392c')]
+   PASS journal: exactly one BEGIN/COMMIT pair, for the B save (v1->v2, sha matches v2 file)  - tx 21252-1-c6392c
+
+== A3  client2 tries its stale update C with --expect 1
+   $ atomicdocs.py put plan - --expect 1   <- C   => rc=3
+   stderr: CONFLICT: conflict on 'plan': expected version 1, current is 2
+   PASS client2 rejected: exit code 3 + CONFLICT (expected 1, current 2)
+   on disk after client2's rejected attempt:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 2 27879048e1b5677f40734496367cc1bba1db0ee9978811d9158bcb52642fa954 f6dacd52
+     v000001.dat                        94 B
+     v000002.dat                        95 B
+     journal.wal: empty [ok]
+   PASS get() == B (client1's update survives, nothing was overwritten)  - 27B 'B|owner=alice;status=review'
+   PASS no file anywhere in the store contains C  - hits=[]
+   PASS history shows exactly v1, v2 (both verify), CURRENT=v2, no temp files  - versions=[1, 2] tmp=[]
+   journal after client2: 16 bytes, records=[]
+   (client2's process ran recovery on open, which checkpointed the journal to a
+    fresh 16-byte header; any BEGIN for C would have been appended after it)
+   PASS journal: no BEGIN (or any record) written for C - CAS failed before the journal
+
+== A4  client2 does it right: re-read, merge its change onto v2, retry with the new version
+   attempt 1: read v2 B|owner=alice;status=review -> merged C'|owner=alice;status=review;tags=urgent -> put --expect 2 => rc=0 3
+   PASS retry commits v3 = B's status + C's tag (both updates kept)  - 40B "C'|owner=alice;status=review;tags=urgent"
+   PASS history now v1, v2, v3, all verify
+   final state of part A:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 3 ad5fce766c189ce8534ef1da2cb5926dca3994fa7ab34651d5f46ceb4c6d3d20 f9201c40
+     v000001.dat                        94 B
+     v000002.dat                        95 B
+     v000003.dat                       108 B
+     journal.wal: empty [ok]
+
+== PART B - writer serialization: 12 client processes race put(expect=1) at the same instant
+   each worker process: open store -> read (v1) -> wait on a go-file barrier -> put(expect=1)
+
+== B1  round 1: 12 racers released within 0.2 ms of each other
+   client  read  start(ms)  end(ms)  outcome
+     00     v1      0.09    37.24   CONFLICT (expected 1, current 2) rc=3
+     01     v1      0.12    35.50   CONFLICT (expected 1, current 2) rc=3
+     02     v1      0.17    34.21   CONFLICT (expected 1, current 2) rc=3
+     03     v1      0.15    35.92   CONFLICT (expected 1, current 2) rc=3
+     04     v1      0.09    37.68   CONFLICT (expected 1, current 2) rc=3
+     05     v1      0.14    36.82   CONFLICT (expected 1, current 2) rc=3
+     06     v1      0.10    36.43   CONFLICT (expected 1, current 2) rc=3
+     07     v1      0.00    26.60   COMMITTED v2
+     08     v1      0.05    34.55   CONFLICT (expected 1, current 2) rc=3
+     09     v1      0.14    38.13   CONFLICT (expected 1, current 2) rc=3
+     10     v1      0.08    35.39   CONFLICT (expected 1, current 2) rc=3
+     11     v1      0.16    33.97   CONFLICT (expected 1, current 2) rc=3
+   winner: client 07; 11 CONFLICTs
+   PASS round 1: exactly ONE writer commits, 11 get CONFLICT (exit 3, saw current=2)
+   PASS round 1: document == the winner's bytes exactly, CURRENT=v2  - 939B 'client-07 round-1 |payload-fro'...
+   PASS round 1: only v1+v2 on disk, both verify, no partial/temp files  - versions=[1, 2] tmp=[]
+   PASS round 1: journal holds one BEGIN/COMMIT pair (the winner), none from the 11 losers
+
+== B2  round 2: 12 racers released within 0.3 ms of each other
+   winner: client 05; 11 CONFLICTs
+   PASS round 2: exactly ONE writer commits, 11 get CONFLICT (exit 3, saw current=2)
+   PASS round 2: document == the winner's bytes exactly, CURRENT=v2  - 939B 'client-05 round-2 |payload-fro'...
+   PASS round 2: only v1+v2 on disk, both verify, no partial/temp files  - versions=[1, 2] tmp=[]
+   PASS round 2: journal holds one BEGIN/COMMIT pair (the winner), none from the 11 losers
+
+== B3  round 3: 12 racers released within 0.2 ms of each other
+   winner: client 02; 11 CONFLICTs
+   PASS round 3: exactly ONE writer commits, 11 get CONFLICT (exit 3, saw current=2)
+   PASS round 3: document == the winner's bytes exactly, CURRENT=v2  - 939B 'client-02 round-3 |payload-fro'...
+   PASS round 3: only v1+v2 on disk, both verify, no partial/temp files  - versions=[1, 2] tmp=[]
+   PASS round 3: journal holds one BEGIN/COMMIT pair (the winner), none from the 11 losers
+   on disk after round 3:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 2 e600c590f5596ac1414bc822175a1b7dc40aa74cba69692eae77637c9d6c2c28 653d6af2
+     v000001.dat                        93 B
+     v000002.dat                      1007 B
+     journal.wal: BEGIN(v1->v2), COMMIT() [ok]
+
+== B4  CONTRAST: the same race WITHOUT expect (blind read-modify-write of a counter)
+   all 12 clients read count=0, each wrote count=1; versions committed: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+   final document: count=1   (should be count=12)
+   PASS no CAS: every write still serialized - versions 2..13, journal BEGIN/COMMIT never interleave
+   PASS no CAS: 11 of 12 updates silently LOST (count=1, not 12) - this is why CAS is needed
+
+== B5  FIX: same counter, every client uses CAS + re-read/retry loop
+   conflicts absorbed by retries: 66; attempts per client: [6, 8, 2, 7, 3, 12, 4, 11, 1, 9, 5, 10]
+   final document: count=12, CURRENT=v13
+   PASS CAS + retry: all 12 increments applied exactly once (count=12, v13)
+
+== HOW IT WORKS (OS mechanism)
+   put() takes the store lock SHARED, then the per-document lock EXCLUSIVE
+     (flock(LOCK_EX) on Linux/macOS, LockFileEx(LOCKFILE_EXCLUSIVE_LOCK) on Windows).
+   Under that lock it reads CURRENT and compares with expect; on mismatch it raises
+     Conflict BEFORE any journal record, temp file or version file is written.
+   So check-then-commit is one critical section: no writer can commit between
+     another writer's check and its commit -> the race has exactly one winner.
+   The atomic rename of CURRENT (rename(2) / MoveFileExW REPLACE_EXISTING|WRITE_THROUGH)
+     is the linearization point: a version 'exists' for readers from that instant.
+   The lock alone serializes writes (no torn/duplicate versions, B4) but cannot know
+     what a client READ; expect=v carries that, turning lost updates into CONFLICTs
+     that the client resolves by re-reading and re-applying its change (A4, B5).
+   Assumptions: clients read version THEN body (CAS stays safe even if a commit
+     sneaks in between); locks are advisory, so all writers must go through AtomicDocs;
+     local file system (byte-range/flock locks are not reliable over NFS/SMB).
+   elapsed 4.4 s
+
+KO-04-C2 Lost-update rejection: 25/25 checks passed -> PASS

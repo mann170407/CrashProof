@@ -1,0 +1,14 @@
+
+AtomicDocs crash matrix (40 trials per point)
+crash point               old    new  corrupt
+after_begin                40      0        0
+torn_data                  40      0        0
+before_data_fsync          40      0        0
+after_data_rename          40      0        0
+torn_pointer               40      0        0
+before_pointer_rename      40      0        0
+after_pointer_rename        0     40        0
+after_commit                0     40        0
+naive torn write            0      0       40   <- naive in-place write
+
+RESULT: PASS - 0 corrupted documents; all 8 crash points x 40 trials recovered to the expected version

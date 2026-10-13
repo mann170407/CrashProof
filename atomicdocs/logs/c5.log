@@ -1,0 +1,610 @@
+KO-04-C5 Interrupted recovery - prove that recovery is idempotent
+
+OS mechanism (what makes rerunning converge)
+  * Truth comes only from verified bytes: CURRENT (own CRC) naming a version whose
+    SHA-256 verifies; if CURRENT is missing/torn, the newest version that verifies.
+    The journal is used only for cleanup and reporting, never as the truth.
+  * Every step is a deterministic function of what is on disk: delete *.tmp (never
+    committed by construction), delete versions ABOVE the truth (provably never
+    committed), rewrite CURRENT only if it does not already name the truth.
+    A step whose work is done finds nothing to do on the next run.
+  * The decision is flushed (fsync version file, fsync CURRENT, fsync the doc
+    directory, fsync docs/) BEFORE the checkpoint replaces the journal with a fresh
+    salt via temp+fsync+rename+dir-fsync. A kill or power cut before the checkpoint
+    leaves the old journal (rerun reports the same txs again); after it, nothing is
+    left to do. So run N+1 starts from a state run N would also have produced.
+  * Reports describe what THAT run did: rolled_back/rolled_forward come from the
+    journal and repeat until the checkpoint resets it; fell_back is reported only
+    by the run that actually repaired CURRENT. The on-disk result is what must
+    (and does) converge.
+Assumptions: local FS with atomic rename and honoured flushes; process kills keep
+the page cache (Part A); power loss is simulated by SimFS (ALICE-style, rename model
+W1) in Part B; faults are injected test data, A = 64 x 0x41, B = 64 x 0x42.
+
+== Scenarios and the expected accepted version
+   S1  v1=A committed + uncommitted v2=B + leftover temps (organisers' setup)
+       expected: v1 = 64B of 0x41 ('A').  CURRENT is readable and names v1, whose SHA-256 verifies, so v1=A is the committed truth. v2 is above what CURRENT names: it was never committed (the crashed put died before its CURRENT rename), so it is rolled back. CURRENT is already right, so the pointer-rewrite step is never needed.
+       reaches: recover_after_tmp_unlink=yes, recover_after_version_unlink=yes, recover_after_pointer_rewrite=no, recover_before_checkpoint=yes
+   S2  S1 + CURRENT torn + v2 torn (simulated media faults)
+       expected: v1 = 64B of 0x41 ('A').  CURRENT does not parse, so the rule is 'newest version whose SHA-256 verifies'. v2 is torn (fails length/SHA-256) and is not a whole version; v1=A verifies, so A is the truth: v2 is deleted and CURRENT is rewritten -> v1.
+       reaches: recover_after_tmp_unlink=yes, recover_after_version_unlink=yes, recover_after_pointer_rewrite=yes, recover_before_checkpoint=yes
+   S3  S1 + CURRENT torn, v2=B intact
+       expected: v2 = 64B of 0x42 ('B').  CURRENT does not parse, so the commit record is lost and the store cannot prove v2 was NOT committed (a crash just after the CURRENT rename followed by a damaged CURRENT looks the same). The rule picks the newest version that fully verifies: v2=B, a whole version written and fsynced by put() and declared in the journal BEGIN v1->v2. Accepting B is atomic (never a mix); CURRENT is rewritten -> v2 and B is reported as rolled forward. Nothing is above v2, so the version-unlink step is never needed.
+       reaches: recover_after_tmp_unlink=yes, recover_after_version_unlink=no, recover_after_pointer_rewrite=yes, recover_before_checkpoint=yes
+
+== Which recovery crash points each scenario reaches (checked, not assumed)
+   PASS S1 reaches exactly ['after tmp unlink', 'after version unlink', 'before checkpoint']  - observed {'recover_after_tmp_unlink': True, 'recover_after_version_unlink': True, 'recover_after_pointer_rewrite': False, 'recover_before_checkpoint': True}
+   PASS S2 reaches exactly ['after tmp unlink', 'after version unlink', 'after CURRENT rewrite', 'before checkpoint']  - observed {'recover_after_tmp_unlink': True, 'recover_after_version_unlink': True, 'recover_after_pointer_rewrite': True, 'recover_before_checkpoint': True}
+   PASS S3 reaches exactly ['after tmp unlink', 'after CURRENT rewrite', 'before checkpoint']  - observed {'recover_after_tmp_unlink': True, 'recover_after_version_unlink': False, 'recover_after_pointer_rewrite': True, 'recover_before_checkpoint': True}
+   PASS every recovery crash point is exercised by some scenario
+
+######## Part A: process kill during recovery (real child processes, exit 137)
+
+== S1: interrupt recovery at recover_after_tmp_unlink
+   before recovery (root also holds journal.wal.4242.0badf00d.tmp):
+     .CURRENT.15164.b6c7457c.tmp        91 B
+     .lock                               0 B
+     .v000003.dat.4242.0badf00d.tmp       66 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #1 with ATOMICDOCS_CRASH_AT=recover_after_tmp_unlink -> exit 137
+   PASS S1/after tmp unlink: recovery killed at the crash point (exit 137)  - exit 137
+   after the kill (partial cleanup; root tmp removed):
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #2 with the SAME crash point (on a copy) -> exit 0: not reached again, the step before it is already done and is not redone; that run completed: rolled_forward=[] rolled_back=['report'] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   PASS S1/after tmp unlink: second attempt at the same point finds nothing to redo and converges  - exit 0
+   PASS S1/after tmp unlink: accepted v1 (whole, SHA-256 ok) survived the interruptions
+   rerun 1 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=['report'] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 1:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S1/after tmp unlink: rerun 1 -> get() == A exactly  - 64B of 0x41 ('A')
+   rerun 2 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 2:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S1/after tmp unlink: rerun 2 -> get() == A exactly  - 64B of 0x41 ('A')
+   PASS S1/after tmp unlink: only committed versions remain ['v1'] (nothing above v1)  - on disk: ['v1']
+   PASS S1/after tmp unlink: no .tmp file anywhere  - []
+   PASS S1/after tmp unlink: CURRENT names v1 and verifies  - CURRENT -> v1 sha 2b69e227c87d...
+   PASS S1/after tmp unlink: journal reset (no open BEGIN)  - status=ok records=0
+   PASS S1/after tmp unlink: rerun 2 changed nothing (fingerprint rerun1 == rerun2)  - 63ee1529f9bf4350 vs 63ee1529f9bf4350, files ['docs/report/CURRENT', 'docs/report/v000001.dat']
+   PASS S1/after tmp unlink: rerun 2 report empty (0 tmp, nothing rolled back/forward)
+   PASS S1/after tmp unlink: converged to the same disk as an uninterrupted recovery  - 63ee1529f9bf4350 vs reference 63ee1529f9bf4350
+
+== S1: interrupt recovery at recover_after_version_unlink
+   before recovery (root also holds journal.wal.4242.0badf00d.tmp):
+     .CURRENT.26520.a943da74.tmp        91 B
+     .lock                               0 B
+     .v000003.dat.4242.0badf00d.tmp       66 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #1 with ATOMICDOCS_CRASH_AT=recover_after_version_unlink -> exit 137
+   PASS S1/after version unlink: recovery killed at the crash point (exit 137)  - exit 137
+   after the kill (partial cleanup; root tmp removed):
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #2 with the SAME crash point (on a copy) -> exit 0: not reached again, the step before it is already done and is not redone; that run completed: rolled_forward=[] rolled_back=['report'] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   PASS S1/after version unlink: second attempt at the same point finds nothing to redo and converges  - exit 0
+   PASS S1/after version unlink: accepted v1 (whole, SHA-256 ok) survived the interruptions
+   rerun 1 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=['report'] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 1:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S1/after version unlink: rerun 1 -> get() == A exactly  - 64B of 0x41 ('A')
+   rerun 2 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 2:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S1/after version unlink: rerun 2 -> get() == A exactly  - 64B of 0x41 ('A')
+   PASS S1/after version unlink: only committed versions remain ['v1'] (nothing above v1)  - on disk: ['v1']
+   PASS S1/after version unlink: no .tmp file anywhere  - []
+   PASS S1/after version unlink: CURRENT names v1 and verifies  - CURRENT -> v1 sha 2b69e227c87d...
+   PASS S1/after version unlink: journal reset (no open BEGIN)  - status=ok records=0
+   PASS S1/after version unlink: rerun 2 changed nothing (fingerprint rerun1 == rerun2)  - 63ee1529f9bf4350 vs 63ee1529f9bf4350, files ['docs/report/CURRENT', 'docs/report/v000001.dat']
+   PASS S1/after version unlink: rerun 2 report empty (0 tmp, nothing rolled back/forward)
+   PASS S1/after version unlink: converged to the same disk as an uninterrupted recovery  - 63ee1529f9bf4350 vs reference 63ee1529f9bf4350
+
+== S1: interrupt recovery at recover_before_checkpoint
+   before recovery (root also holds journal.wal.4242.0badf00d.tmp):
+     .CURRENT.1856.2008713c.tmp         91 B
+     .lock                               0 B
+     .v000003.dat.4242.0badf00d.tmp       66 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #1 with ATOMICDOCS_CRASH_AT=recover_before_checkpoint -> exit 137
+   PASS S1/before checkpoint: recovery killed at the crash point (exit 137)  - exit 137
+   after the kill (partial cleanup; root tmp removed):
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #2 with the SAME crash point -> exit 137 (killed again before the checkpoint)
+   after the second kill (journal still holds the old BEGIN):
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   PASS S1/before checkpoint: killed again at the same point (exit 137)  - exit 137
+   PASS S1/before checkpoint: accepted v1 (whole, SHA-256 ok) survived the interruptions
+   rerun 1 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=['report'] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 1:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S1/before checkpoint: rerun 1 -> get() == A exactly  - 64B of 0x41 ('A')
+   rerun 2 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 2:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S1/before checkpoint: rerun 2 -> get() == A exactly  - 64B of 0x41 ('A')
+   PASS S1/before checkpoint: only committed versions remain ['v1'] (nothing above v1)  - on disk: ['v1']
+   PASS S1/before checkpoint: no .tmp file anywhere  - []
+   PASS S1/before checkpoint: CURRENT names v1 and verifies  - CURRENT -> v1 sha 2b69e227c87d...
+   PASS S1/before checkpoint: journal reset (no open BEGIN)  - status=ok records=0
+   PASS S1/before checkpoint: rerun 2 changed nothing (fingerprint rerun1 == rerun2)  - 63ee1529f9bf4350 vs 63ee1529f9bf4350, files ['docs/report/CURRENT', 'docs/report/v000001.dat']
+   PASS S1/before checkpoint: rerun 2 report empty (0 tmp, nothing rolled back/forward)
+   PASS S1/before checkpoint: converged to the same disk as an uninterrupted recovery  - 63ee1529f9bf4350 vs reference 63ee1529f9bf4350
+
+== S2: interrupt recovery at recover_after_tmp_unlink
+   before recovery (root also holds journal.wal.4242.0badf00d.tmp):
+     .CURRENT.21528.5dfc23f4.tmp        91 B
+     .lock                               0 B
+     .v000003.dat.4242.0badf00d.tmp       66 B
+     CURRENT                            45 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d
+     v000001.dat                       132 B
+     v000002.dat                        66 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #1 with ATOMICDOCS_CRASH_AT=recover_after_tmp_unlink -> exit 137
+   PASS S2/after tmp unlink: recovery killed at the crash point (exit 137)  - exit 137
+   after the kill (partial cleanup; root tmp removed):
+     .lock                               0 B
+     CURRENT                            45 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d
+     v000001.dat                       132 B
+     v000002.dat                        66 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #2 with the SAME crash point (on a copy) -> exit 0: not reached again, the step before it is already done and is not redone; that run completed: rolled_forward=[] rolled_back=['report'] tmp_removed=0 fell_back=['v1'] degraded=0 journal=ok
+   PASS S2/after tmp unlink: second attempt at the same point finds nothing to redo and converges  - exit 0
+   PASS S2/after tmp unlink: accepted v1 (whole, SHA-256 ok) survived the interruptions
+   rerun 1 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=['report'] tmp_removed=0 fell_back=['v1'] degraded=0 journal=ok
+   after rerun 1:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S2/after tmp unlink: rerun 1 -> get() == A exactly  - 64B of 0x41 ('A')
+   rerun 2 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 2:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S2/after tmp unlink: rerun 2 -> get() == A exactly  - 64B of 0x41 ('A')
+   PASS S2/after tmp unlink: only committed versions remain ['v1'] (nothing above v1)  - on disk: ['v1']
+   PASS S2/after tmp unlink: no .tmp file anywhere  - []
+   PASS S2/after tmp unlink: CURRENT names v1 and verifies  - CURRENT -> v1 sha 2b69e227c87d...
+   PASS S2/after tmp unlink: journal reset (no open BEGIN)  - status=ok records=0
+   PASS S2/after tmp unlink: rerun 2 changed nothing (fingerprint rerun1 == rerun2)  - 63ee1529f9bf4350 vs 63ee1529f9bf4350, files ['docs/report/CURRENT', 'docs/report/v000001.dat']
+   PASS S2/after tmp unlink: rerun 2 report empty (0 tmp, nothing rolled back/forward)
+   PASS S2/after tmp unlink: converged to the same disk as an uninterrupted recovery  - 63ee1529f9bf4350 vs reference 63ee1529f9bf4350
+
+== S2: interrupt recovery at recover_after_version_unlink
+   before recovery (root also holds journal.wal.4242.0badf00d.tmp):
+     .CURRENT.21304.a128885f.tmp        91 B
+     .lock                               0 B
+     .v000003.dat.4242.0badf00d.tmp       66 B
+     CURRENT                            45 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d
+     v000001.dat                       132 B
+     v000002.dat                        66 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #1 with ATOMICDOCS_CRASH_AT=recover_after_version_unlink -> exit 137
+   PASS S2/after version unlink: recovery killed at the crash point (exit 137)  - exit 137
+   after the kill (partial cleanup; root tmp removed):
+     .lock                               0 B
+     CURRENT                            45 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d
+     v000001.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #2 with the SAME crash point (on a copy) -> exit 0: not reached again, the step before it is already done and is not redone; that run completed: rolled_forward=[] rolled_back=['report'] tmp_removed=0 fell_back=['v1'] degraded=0 journal=ok
+   PASS S2/after version unlink: second attempt at the same point finds nothing to redo and converges  - exit 0
+   PASS S2/after version unlink: accepted v1 (whole, SHA-256 ok) survived the interruptions
+   rerun 1 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=['report'] tmp_removed=0 fell_back=['v1'] degraded=0 journal=ok
+   after rerun 1:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S2/after version unlink: rerun 1 -> get() == A exactly  - 64B of 0x41 ('A')
+   rerun 2 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 2:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S2/after version unlink: rerun 2 -> get() == A exactly  - 64B of 0x41 ('A')
+   PASS S2/after version unlink: only committed versions remain ['v1'] (nothing above v1)  - on disk: ['v1']
+   PASS S2/after version unlink: no .tmp file anywhere  - []
+   PASS S2/after version unlink: CURRENT names v1 and verifies  - CURRENT -> v1 sha 2b69e227c87d...
+   PASS S2/after version unlink: journal reset (no open BEGIN)  - status=ok records=0
+   PASS S2/after version unlink: rerun 2 changed nothing (fingerprint rerun1 == rerun2)  - 63ee1529f9bf4350 vs 63ee1529f9bf4350, files ['docs/report/CURRENT', 'docs/report/v000001.dat']
+   PASS S2/after version unlink: rerun 2 report empty (0 tmp, nothing rolled back/forward)
+   PASS S2/after version unlink: converged to the same disk as an uninterrupted recovery  - 63ee1529f9bf4350 vs reference 63ee1529f9bf4350
+
+== S2: interrupt recovery at recover_after_pointer_rewrite
+   before recovery (root also holds journal.wal.4242.0badf00d.tmp):
+     .CURRENT.21188.cec0ca5a.tmp        91 B
+     .lock                               0 B
+     .v000003.dat.4242.0badf00d.tmp       66 B
+     CURRENT                            45 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d
+     v000001.dat                       132 B
+     v000002.dat                        66 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #1 with ATOMICDOCS_CRASH_AT=recover_after_pointer_rewrite -> exit 137
+   PASS S2/after CURRENT rewrite: recovery killed at the crash point (exit 137)  - exit 137
+   after the kill (partial cleanup; root tmp removed):
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #2 with the SAME crash point (on a copy) -> exit 0: not reached again, the step before it is already done and is not redone; that run completed: rolled_forward=[] rolled_back=['report'] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   PASS S2/after CURRENT rewrite: second attempt at the same point finds nothing to redo and converges  - exit 0
+   PASS S2/after CURRENT rewrite: accepted v1 (whole, SHA-256 ok) survived the interruptions
+   rerun 1 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=['report'] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 1:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S2/after CURRENT rewrite: rerun 1 -> get() == A exactly  - 64B of 0x41 ('A')
+   rerun 2 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 2:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S2/after CURRENT rewrite: rerun 2 -> get() == A exactly  - 64B of 0x41 ('A')
+   PASS S2/after CURRENT rewrite: only committed versions remain ['v1'] (nothing above v1)  - on disk: ['v1']
+   PASS S2/after CURRENT rewrite: no .tmp file anywhere  - []
+   PASS S2/after CURRENT rewrite: CURRENT names v1 and verifies  - CURRENT -> v1 sha 2b69e227c87d...
+   PASS S2/after CURRENT rewrite: journal reset (no open BEGIN)  - status=ok records=0
+   PASS S2/after CURRENT rewrite: rerun 2 changed nothing (fingerprint rerun1 == rerun2)  - 63ee1529f9bf4350 vs 63ee1529f9bf4350, files ['docs/report/CURRENT', 'docs/report/v000001.dat']
+   PASS S2/after CURRENT rewrite: rerun 2 report empty (0 tmp, nothing rolled back/forward)
+   PASS S2/after CURRENT rewrite: converged to the same disk as an uninterrupted recovery  - 63ee1529f9bf4350 vs reference 63ee1529f9bf4350
+
+== S2: interrupt recovery at recover_before_checkpoint
+   before recovery (root also holds journal.wal.4242.0badf00d.tmp):
+     .CURRENT.17560.33141926.tmp        91 B
+     .lock                               0 B
+     .v000003.dat.4242.0badf00d.tmp       66 B
+     CURRENT                            45 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d
+     v000001.dat                       132 B
+     v000002.dat                        66 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #1 with ATOMICDOCS_CRASH_AT=recover_before_checkpoint -> exit 137
+   PASS S2/before checkpoint: recovery killed at the crash point (exit 137)  - exit 137
+   after the kill (partial cleanup; root tmp removed):
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #2 with the SAME crash point -> exit 137 (killed again before the checkpoint)
+   after the second kill (journal still holds the old BEGIN):
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   PASS S2/before checkpoint: killed again at the same point (exit 137)  - exit 137
+   PASS S2/before checkpoint: accepted v1 (whole, SHA-256 ok) survived the interruptions
+   rerun 1 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=['report'] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 1:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S2/before checkpoint: rerun 1 -> get() == A exactly  - 64B of 0x41 ('A')
+   rerun 2 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 2:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d7cd6a51297497c7fede28034465aac9ce4a0 cf553de7
+     v000001.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S2/before checkpoint: rerun 2 -> get() == A exactly  - 64B of 0x41 ('A')
+   PASS S2/before checkpoint: only committed versions remain ['v1'] (nothing above v1)  - on disk: ['v1']
+   PASS S2/before checkpoint: no .tmp file anywhere  - []
+   PASS S2/before checkpoint: CURRENT names v1 and verifies  - CURRENT -> v1 sha 2b69e227c87d...
+   PASS S2/before checkpoint: journal reset (no open BEGIN)  - status=ok records=0
+   PASS S2/before checkpoint: rerun 2 changed nothing (fingerprint rerun1 == rerun2)  - 63ee1529f9bf4350 vs 63ee1529f9bf4350, files ['docs/report/CURRENT', 'docs/report/v000001.dat']
+   PASS S2/before checkpoint: rerun 2 report empty (0 tmp, nothing rolled back/forward)
+   PASS S2/before checkpoint: converged to the same disk as an uninterrupted recovery  - 63ee1529f9bf4350 vs reference 63ee1529f9bf4350
+
+== S3: interrupt recovery at recover_after_tmp_unlink
+   before recovery (root also holds journal.wal.4242.0badf00d.tmp):
+     .CURRENT.24552.7595aed1.tmp        91 B
+     .lock                               0 B
+     .v000003.dat.4242.0badf00d.tmp       66 B
+     CURRENT                            45 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #1 with ATOMICDOCS_CRASH_AT=recover_after_tmp_unlink -> exit 137
+   PASS S3/after tmp unlink: recovery killed at the crash point (exit 137)  - exit 137
+   after the kill (partial cleanup; root tmp removed):
+     .lock                               0 B
+     CURRENT                            45 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #2 with the SAME crash point (on a copy) -> exit 0: not reached again, the step before it is already done and is not redone; that run completed: rolled_forward=['report'] rolled_back=[] tmp_removed=0 fell_back=['v2'] degraded=0 journal=ok
+   PASS S3/after tmp unlink: second attempt at the same point finds nothing to redo and converges  - exit 0
+   PASS S3/after tmp unlink: accepted v2 (whole, SHA-256 ok) survived the interruptions
+   rerun 1 (no fault) -> exit 0
+     report: rolled_forward=['report'] rolled_back=[] tmp_removed=0 fell_back=['v2'] degraded=0 journal=ok
+   after rerun 1:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 2 0783e4b7831c9ab9f1cc71353e175da485648ac19bcff2fc3f44322eb7b67bc7 3487c7e4
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S3/after tmp unlink: rerun 1 -> get() == B exactly  - 64B of 0x42 ('B')
+   rerun 2 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 2:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 2 0783e4b7831c9ab9f1cc71353e175da485648ac19bcff2fc3f44322eb7b67bc7 3487c7e4
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S3/after tmp unlink: rerun 2 -> get() == B exactly  - 64B of 0x42 ('B')
+   PASS S3/after tmp unlink: only committed versions remain ['v1', 'v2'] (nothing above v2)  - on disk: ['v1', 'v2']
+   PASS S3/after tmp unlink: no .tmp file anywhere  - []
+   PASS S3/after tmp unlink: CURRENT names v2 and verifies  - CURRENT -> v2 sha 0783e4b7831c...
+   PASS S3/after tmp unlink: journal reset (no open BEGIN)  - status=ok records=0
+   PASS S3/after tmp unlink: rerun 2 changed nothing (fingerprint rerun1 == rerun2)  - a1a523c1dd94bf69 vs a1a523c1dd94bf69, files ['docs/report/CURRENT', 'docs/report/v000001.dat', 'docs/report/v000002.dat']
+   PASS S3/after tmp unlink: rerun 2 report empty (0 tmp, nothing rolled back/forward)
+   PASS S3/after tmp unlink: converged to the same disk as an uninterrupted recovery  - a1a523c1dd94bf69 vs reference a1a523c1dd94bf69
+
+== S3: interrupt recovery at recover_after_pointer_rewrite
+   before recovery (root also holds journal.wal.4242.0badf00d.tmp):
+     .CURRENT.8380.78935d9d.tmp         91 B
+     .lock                               0 B
+     .v000003.dat.4242.0badf00d.tmp       66 B
+     CURRENT                            45 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #1 with ATOMICDOCS_CRASH_AT=recover_after_pointer_rewrite -> exit 137
+   PASS S3/after CURRENT rewrite: recovery killed at the crash point (exit 137)  - exit 137
+   after the kill (partial cleanup; root tmp removed):
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 2 0783e4b7831c9ab9f1cc71353e175da485648ac19bcff2fc3f44322eb7b67bc7 3487c7e4
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #2 with the SAME crash point (on a copy) -> exit 0: not reached again, the step before it is already done and is not redone; that run completed: rolled_forward=['report'] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   PASS S3/after CURRENT rewrite: second attempt at the same point finds nothing to redo and converges  - exit 0
+   PASS S3/after CURRENT rewrite: accepted v2 (whole, SHA-256 ok) survived the interruptions
+   rerun 1 (no fault) -> exit 0
+     report: rolled_forward=['report'] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 1:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 2 0783e4b7831c9ab9f1cc71353e175da485648ac19bcff2fc3f44322eb7b67bc7 3487c7e4
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S3/after CURRENT rewrite: rerun 1 -> get() == B exactly  - 64B of 0x42 ('B')
+   rerun 2 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 2:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 2 0783e4b7831c9ab9f1cc71353e175da485648ac19bcff2fc3f44322eb7b67bc7 3487c7e4
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S3/after CURRENT rewrite: rerun 2 -> get() == B exactly  - 64B of 0x42 ('B')
+   PASS S3/after CURRENT rewrite: only committed versions remain ['v1', 'v2'] (nothing above v2)  - on disk: ['v1', 'v2']
+   PASS S3/after CURRENT rewrite: no .tmp file anywhere  - []
+   PASS S3/after CURRENT rewrite: CURRENT names v2 and verifies  - CURRENT -> v2 sha 0783e4b7831c...
+   PASS S3/after CURRENT rewrite: journal reset (no open BEGIN)  - status=ok records=0
+   PASS S3/after CURRENT rewrite: rerun 2 changed nothing (fingerprint rerun1 == rerun2)  - a1a523c1dd94bf69 vs a1a523c1dd94bf69, files ['docs/report/CURRENT', 'docs/report/v000001.dat', 'docs/report/v000002.dat']
+   PASS S3/after CURRENT rewrite: rerun 2 report empty (0 tmp, nothing rolled back/forward)
+   PASS S3/after CURRENT rewrite: converged to the same disk as an uninterrupted recovery  - a1a523c1dd94bf69 vs reference a1a523c1dd94bf69
+
+== S3: interrupt recovery at recover_before_checkpoint
+   before recovery (root also holds journal.wal.4242.0badf00d.tmp):
+     .CURRENT.14052.c5a2a803.tmp        91 B
+     .lock                               0 B
+     .v000003.dat.4242.0badf00d.tmp       66 B
+     CURRENT                            45 B  -> ADOC-CURRENT 2 1 2b69e227c87d3023c12ba546086d
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #1 with ATOMICDOCS_CRASH_AT=recover_before_checkpoint -> exit 137
+   PASS S3/before checkpoint: recovery killed at the crash point (exit 137)  - exit 137
+   after the kill (partial cleanup; root tmp removed):
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 2 0783e4b7831c9ab9f1cc71353e175da485648ac19bcff2fc3f44322eb7b67bc7 3487c7e4
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   recover #2 with the SAME crash point -> exit 137 (killed again before the checkpoint)
+   after the second kill (journal still holds the old BEGIN):
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 2 0783e4b7831c9ab9f1cc71353e175da485648ac19bcff2fc3f44322eb7b67bc7 3487c7e4
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   PASS S3/before checkpoint: killed again at the same point (exit 137)  - exit 137
+   PASS S3/before checkpoint: accepted v2 (whole, SHA-256 ok) survived the interruptions
+   rerun 1 (no fault) -> exit 0
+     report: rolled_forward=['report'] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 1:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 2 0783e4b7831c9ab9f1cc71353e175da485648ac19bcff2fc3f44322eb7b67bc7 3487c7e4
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S3/before checkpoint: rerun 1 -> get() == B exactly  - 64B of 0x42 ('B')
+   rerun 2 (no fault) -> exit 0
+     report: rolled_forward=[] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   after rerun 2:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 2 0783e4b7831c9ab9f1cc71353e175da485648ac19bcff2fc3f44322eb7b67bc7 3487c7e4
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: empty [ok]
+   PASS S3/before checkpoint: rerun 2 -> get() == B exactly  - 64B of 0x42 ('B')
+   PASS S3/before checkpoint: only committed versions remain ['v1', 'v2'] (nothing above v2)  - on disk: ['v1', 'v2']
+   PASS S3/before checkpoint: no .tmp file anywhere  - []
+   PASS S3/before checkpoint: CURRENT names v2 and verifies  - CURRENT -> v2 sha 0783e4b7831c...
+   PASS S3/before checkpoint: journal reset (no open BEGIN)  - status=ok records=0
+   PASS S3/before checkpoint: rerun 2 changed nothing (fingerprint rerun1 == rerun2)  - a1a523c1dd94bf69 vs a1a523c1dd94bf69, files ['docs/report/CURRENT', 'docs/report/v000001.dat', 'docs/report/v000002.dat']
+   PASS S3/before checkpoint: rerun 2 report empty (0 tmp, nothing rolled back/forward)
+   PASS S3/before checkpoint: converged to the same disk as an uninterrupted recovery  - a1a523c1dd94bf69 vs reference a1a523c1dd94bf69
+
+######## Part A2: the same crash point fires twice in a row (two documents)
+
+== two docs ('notes', 'report'), each in the scenario's state; kill, kill again, rerun x2
+   [S1 @ recover_after_tmp_unlink] before:  notes{.CURRENT.27992.b959f55f.tmp, .v000003.dat.4242.0badf00d.tmp, CURRENT, v000001.dat, v000002.dat}  report{.CURRENT.8956.2d6b8243.tmp, .v000003.dat.4242.0badf00d.tmp, CURRENT, v000001.dat, v000002.dat}
+     kill #1 -> exit 137   notes{CURRENT, v000001.dat, v000002.dat}  report{.CURRENT.8956.2d6b8243.tmp, .v000003.dat.4242.0badf00d.tmp, CURRENT, v000001.dat, v000002.dat}
+     kill #2 -> exit 137   notes{CURRENT, v000001.dat}  report{CURRENT, v000001.dat, v000002.dat}
+   PASS A2 S1/after tmp unlink: killed at the SAME point twice in a row  - exits [137, 137]
+     rerun 1 -> exit 0   notes{CURRENT, v000001.dat}  report{CURRENT, v000001.dat}
+        report: rolled_forward=[] rolled_back=['notes', 'report'] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+     rerun 2 -> exit 0   notes{CURRENT, v000001.dat}  report{CURRENT, v000001.dat}
+        report: rolled_forward=[] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   PASS A2 S1/after tmp unlink: both documents == A, CURRENT -> v1 verifies, no tmp
+   PASS A2 S1/after tmp unlink: rerun 2 changed nothing and converged to the uninterrupted result  - 14da2bd123f02ffe / 14da2bd123f02ffe / ref 14da2bd123f02ffe
+   [S1 @ recover_after_version_unlink] before:  notes{.CURRENT.21436.b235af30.tmp, .v000003.dat.4242.0badf00d.tmp, CURRENT, v000001.dat, v000002.dat}  report{.CURRENT.21508.7ff31f85.tmp, .v000003.dat.4242.0badf00d.tmp, CURRENT, v000001.dat, v000002.dat}
+     kill #1 -> exit 137   notes{CURRENT, v000001.dat}  report{.CURRENT.21508.7ff31f85.tmp, .v000003.dat.4242.0badf00d.tmp, CURRENT, v000001.dat, v000002.dat}
+     kill #2 -> exit 137   notes{CURRENT, v000001.dat}  report{CURRENT, v000001.dat}
+   PASS A2 S1/after version unlink: killed at the SAME point twice in a row  - exits [137, 137]
+     rerun 1 -> exit 0   notes{CURRENT, v000001.dat}  report{CURRENT, v000001.dat}
+        report: rolled_forward=[] rolled_back=['notes', 'report'] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+     rerun 2 -> exit 0   notes{CURRENT, v000001.dat}  report{CURRENT, v000001.dat}
+        report: rolled_forward=[] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   PASS A2 S1/after version unlink: both documents == A, CURRENT -> v1 verifies, no tmp
+   PASS A2 S1/after version unlink: rerun 2 changed nothing and converged to the uninterrupted result  - 14da2bd123f02ffe / 14da2bd123f02ffe / ref 14da2bd123f02ffe
+   [S2 @ recover_after_pointer_rewrite] before:  notes{.CURRENT.29300.e24eb2bc.tmp, .v000003.dat.4242.0badf00d.tmp, CURRENT, v000001.dat, v000002.dat}  report{.CURRENT.24028.77d38d5b.tmp, .v000003.dat.4242.0badf00d.tmp, CURRENT, v000001.dat, v000002.dat}
+     kill #1 -> exit 137   notes{CURRENT, v000001.dat}  report{.CURRENT.24028.77d38d5b.tmp, .v000003.dat.4242.0badf00d.tmp, CURRENT, v000001.dat, v000002.dat}
+     kill #2 -> exit 137   notes{CURRENT, v000001.dat}  report{CURRENT, v000001.dat}
+   PASS A2 S2/after CURRENT rewrite: killed at the SAME point twice in a row  - exits [137, 137]
+     rerun 1 -> exit 0   notes{CURRENT, v000001.dat}  report{CURRENT, v000001.dat}
+        report: rolled_forward=[] rolled_back=['notes', 'report'] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+     rerun 2 -> exit 0   notes{CURRENT, v000001.dat}  report{CURRENT, v000001.dat}
+        report: rolled_forward=[] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   PASS A2 S2/after CURRENT rewrite: both documents == A, CURRENT -> v1 verifies, no tmp
+   PASS A2 S2/after CURRENT rewrite: rerun 2 changed nothing and converged to the uninterrupted result  - 14da2bd123f02ffe / 14da2bd123f02ffe / ref 14da2bd123f02ffe
+   [S1 @ recover_before_checkpoint] before:  notes{.CURRENT.30592.03e47918.tmp, .v000003.dat.4242.0badf00d.tmp, CURRENT, v000001.dat, v000002.dat}  report{.CURRENT.16632.2ff5b5b6.tmp, .v000003.dat.4242.0badf00d.tmp, CURRENT, v000001.dat, v000002.dat}
+     kill #1 -> exit 137   notes{CURRENT, v000001.dat}  report{CURRENT, v000001.dat}
+     kill #2 -> exit 137   notes{CURRENT, v000001.dat}  report{CURRENT, v000001.dat}
+   PASS A2 S1/before checkpoint: killed at the SAME point twice in a row  - exits [137, 137]
+     rerun 1 -> exit 0   notes{CURRENT, v000001.dat}  report{CURRENT, v000001.dat}
+        report: rolled_forward=[] rolled_back=['notes', 'report'] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+     rerun 2 -> exit 0   notes{CURRENT, v000001.dat}  report{CURRENT, v000001.dat}
+        report: rolled_forward=[] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   PASS A2 S1/before checkpoint: both documents == A, CURRENT -> v1 verifies, no tmp
+   PASS A2 S1/before checkpoint: rerun 2 changed nothing and converged to the uninterrupted result  - 14da2bd123f02ffe / 14da2bd123f02ffe / ref 14da2bd123f02ffe
+   [S3 @ recover_after_pointer_rewrite] before:  notes{.CURRENT.1952.0bf5a46f.tmp, .v000003.dat.4242.0badf00d.tmp, CURRENT, v000001.dat, v000002.dat}  report{.CURRENT.4192.8ab77b64.tmp, .v000003.dat.4242.0badf00d.tmp, CURRENT, v000001.dat, v000002.dat}
+     kill #1 -> exit 137   notes{CURRENT, v000001.dat, v000002.dat}  report{.CURRENT.4192.8ab77b64.tmp, .v000003.dat.4242.0badf00d.tmp, CURRENT, v000001.dat, v000002.dat}
+     kill #2 -> exit 137   notes{CURRENT, v000001.dat, v000002.dat}  report{CURRENT, v000001.dat, v000002.dat}
+   PASS A2 S3/after CURRENT rewrite: killed at the SAME point twice in a row  - exits [137, 137]
+     rerun 1 -> exit 0   notes{CURRENT, v000001.dat, v000002.dat}  report{CURRENT, v000001.dat, v000002.dat}
+        report: rolled_forward=['notes', 'report'] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+     rerun 2 -> exit 0   notes{CURRENT, v000001.dat, v000002.dat}  report{CURRENT, v000001.dat, v000002.dat}
+        report: rolled_forward=[] rolled_back=[] tmp_removed=0 fell_back=[] degraded=0 journal=ok
+   PASS A2 S3/after CURRENT rewrite: both documents == B, CURRENT -> v2 verifies, no tmp
+   PASS A2 S3/after CURRENT rewrite: rerun 2 changed nothing and converged to the uninterrupted result  - 9dec3301c84ef08d / 9dec3301c84ef08d / ref 9dec3301c84ef08d
+
+######## Part B: power loss DURING recovery (SimFS), then real recovery x2
+   A process kill keeps the page cache; a power cut does not. Here every legal
+   post-power-loss disk (unsynced micro-ops lost in any combination) at every syscall
+   boundary of recovery is materialised and recovered twice with the real code.
+   (Kill points are prefixes of this same deterministic op sequence, so 'killed,
+   then power lost' states are included.)
+
+== Part B, scenario S1 (v1=A committed + uncommitted v2=B + leftover temps (organisers' setup))
+   recovery's recorded syscalls (SimFS), with the process-kill points of Part A:
+      1. unlink journal.wal.4242.0badf00d.tmp           micro-ops so far: 1
+      2. unlink .CURRENT.3956.25864d4d.tmp              micro-ops so far: 2
+      3. unlink .v000003.dat.4242.0badf00d.tmp          micro-ops so far: 3
+         <-- recover_after_tmp_unlink fires here
+      4. unlink v000002.dat                             micro-ops so far: 4
+         <-- recover_after_version_unlink fires here
+      5. fsync v000001.dat                              micro-ops so far: 5
+      6. fsync CURRENT                                  micro-ops so far: 6
+      7. fsync dir report                               micro-ops so far: 7
+      8. fsync dir docs                                 micro-ops so far: 8
+         <-- recover_before_checkpoint fires here
+      9. create journal.wal.6480.248c165f.tmp           micro-ops so far: 10
+     10. write 16B journal.wal.6480.248c165f.tmp        micro-ops so far: 12
+     11. fsync journal.wal.6480.248c165f.tmp            micro-ops so far: 13
+     12. rename journal.wal.6480.248c165f.tmp -> journal.wal micro-ops so far: 14
+     13. fsync dir store                                micro-ops so far: 15
+   power lost after                                     k states distinct  bad  enumeration
+   start (nothing persisted)                            0      1        1    0  exhaustive/0 opt
+   unlink journal.wal.4242.0badf00d.tmp                 1      2        1    0  exhaustive/1 opt
+   unlink .CURRENT.3956.25864d4d.tmp                    2      4        2    0  exhaustive/2 opt
+   unlink .v000003.dat.4242.0badf00d.tmp                3      8        4    0  exhaustive/3 opt
+   unlink v000002.dat                                   4     16        8    0  exhaustive/4 opt
+   fsync v000001.dat                                    5     16        0    0  exhaustive/4 opt
+   fsync CURRENT                                        6     16        0    0  exhaustive/4 opt
+   fsync dir report                                     7      2        0    0  exhaustive/1 opt
+   fsync dir docs                                       8      2        0    0  exhaustive/1 opt
+   create journal.wal.6480.248c165f.tmp                10      8        2    0  exhaustive/3 opt
+   write 16B journal.wal.6480.248c165f.tmp             12     32        4    0  exhaustive/5 opt
+   fsync journal.wal.6480.248c165f.tmp                 13      4        0    0  exhaustive/2 opt
+   rename journal.wal.6480.248c165f.tmp -> journal.    14      8        2    0  exhaustive/3 opt
+   fsync dir store                                     15      1        0    0  exhaustive/0 opt
+   S1: 13 syscalls, 15 micro-ops, 120 crash states explored, 24 distinct, 0 corrupted/non-idempotent (exhaustive, 0.7s)
+   PASS B S1: every power-loss state during recovery -> A exactly, no tmp, rerun changes nothing  - 24 distinct states, 0 bad
+
+== Part B, scenario S2 (S1 + CURRENT torn + v2 torn (simulated media faults))
+   S2: 18 syscalls, 22 micro-ops, 510 crash states explored, 88 distinct, 0 corrupted/non-idempotent (exhaustive, 3.0s)
+   PASS B S2: every power-loss state during recovery -> A exactly, no tmp, rerun changes nothing  - 88 distinct states, 0 bad
+
+== Part B, scenario S3 (S1 + CURRENT torn, v2=B intact)
+   S3: 17 syscalls, 21 micro-ops, 286 crash states explored, 48 distinct, 0 corrupted/non-idempotent (exhaustive, 1.7s)
+   PASS B S3: every power-loss state during recovery -> B exactly, no tmp, rerun changes nothing  - 48 distinct states, 0 bad
+
+== Part B totals
+   syscalls in recovery: 48, crash states explored: 916, distinct: 160, corrupted/non-idempotent: 0
+   (crash_states(): exhaustive when <= 10 optional micro-ops, else targeted + 60 random subsets)
+   total runtime 17s
+
+KO-04-C5 Interrupted recovery: 142/142 checks passed -> PASS

@@ -1,0 +1,89 @@
+{
+ "id": "KO-04-C3",
+ "title": "Retention under read pressure",
+ "pass": true,
+ "passed": 16,
+ "total": 16,
+ "checks": [
+  {
+   "check": "retention: never more than 3 version files after a save's GC",
+   "pass": true,
+   "detail": "max seen 3"
+  },
+  {
+   "check": "v1 removed exactly when v4 committed (GC deletes v <= current-3)",
+   "pass": true,
+   "detail": "v1 gone after save v4"
+  },
+  {
+   "check": "reader still paused during all saves (it read CURRENT before any of them)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "reader got a whole committed version: v6 exactly (no error, no mix)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "retry was bounded: 2 attempts used (<= READ_RETRIES=5)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "at the end exactly v4, v5, v6 on disk, no temp files",
+   "pass": true,
+   "detail": "v4 v5 v6"
+  },
+  {
+   "check": "open handle survives GC unlink (POSIX unlink / Windows FILE_SHARE_DELETE)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "ReadContention raised after exactly READ_RETRIES=5 attempts (no infinite loop)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "each retry re-read CURRENT and saw a NEWER version (v1, v4, v7, ...)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "retention still bounded while the reader starved: 3 version files on disk",
+   "pass": true,
+   "detail": "v14 v15 v16"
+  },
+  {
+   "check": "once the pressure stops, a normal get() returns the newest version v16 whole",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "every read returned a whole committed version (tag + full body verified)",
+   "pass": true,
+   "detail": "errors=[]"
+  },
+  {
+   "check": "reads are monotonic per reader (never went back to an older version)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "GC'd-version retries happened and were absorbed within the bound (no ReadContention)",
+   "pass": true,
+   "detail": "167 retries, max 2 attempts per get"
+  },
+  {
+   "check": "disk never held more than KEEP_VERSIONS+1 = 4 version files, temp files <= 2",
+   "pass": true,
+   "detail": "max 4 version files, 1 temp"
+  },
+  {
+   "check": "at the end: exactly the newest 3 versions, CURRENT=v201",
+   "pass": true,
+   "detail": "v199 v200 v201"
+  }
+ ]
+}

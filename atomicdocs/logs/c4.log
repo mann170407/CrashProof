@@ -1,0 +1,118 @@
+KO-04-C4  Failure after commit, before flush
+A = 64B of 0x41 ('A'), B = 64B of 0x42 ('B'), document 'doc'; fault = simulated EIO from the directory fsync
+that follows the CURRENT rename (FlushFileBuffers on the directory handle here).
+
+== Mechanism
+   rename(CURRENT.tmp -> CURRENT) is the commit point: it is atomic, so every
+   reader immediately sees v2. But the rename only changed the directory in
+   memory; it becomes durable when the DIRECTORY is flushed (fsync(dirfd) /
+   FlushFileBuffers). If that flush fails with EIO, we know neither 'committed and
+   durable' nor 'not committed':
+    - reporting FAILURE would be a lie if the rename is already on disk (and
+      deleting v2 to 'undo' it would destroy a committed version);
+    - reporting SUCCESS would be a lie if a power cut loses the rename;
+    - retrying fsync is unsafe (fsyncgate, PostgreSQL 2018: after a failed fsync
+      the kernel may drop the dirty state, so a second fsync 'succeeds' falsely).
+   So the store raises CommitUnknownFsync, poisons the handle, deletes nothing past
+   the commit point, and lets recovery read the truth back from disk on reopen.
+
+== Setup: v1 = A
+   put A -> v1   (64B of 0x41 ('A'))
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2eef02e7004ee2627c0ab9d78c04401a1993ff58bce4f032e34b9ea870c282a9 a6505128
+     v000001.dat                       132 B
+     journal.wal: BEGIN(v0->v1), COMMIT() [ok]
+
+== put(B) on a file system whose directory fsync after the CURRENT rename fails (EIO)
+   recorded system calls of the failing put (commit ordering):
+      write    journal.wal (169 B)
+      fsync    journal.wal
+      create   .v000002.dat.12872.51e58ade.tmp
+      write    .v000002.dat.12872.51e58ade.tmp (132 B)
+      fsync    .v000002.dat.12872.51e58ade.tmp
+      rename   .v000002.dat.12872.51e58ade.tmp -> v000002.dat
+      fsync_dir doc
+      create   .CURRENT.12872.3871caff.tmp
+      write    .CURRENT.12872.3871caff.tmp (91 B)
+      fsync    .CURRENT.12872.3871caff.tmp
+      rename   .CURRENT.12872.3871caff.tmp -> CURRENT   <-- COMMIT POINT (atomic)
+      fsync_dir doc  -> EIO (INJECTED)
+   exception: CommitUnknownFsync: flush failed after the commit point, outcome unknown; reopen to let recovery decide: injected EIO
+   PASS fault injected exactly once, on the directory fsync after the CURRENT rename  - injected=1
+   PASS put raised CommitUnknownFsync  - CommitUnknownFsync
+   PASS ... which is an ad.CommitUnknown (outcome unknown, not 'failed')
+   PASS ... and an ad.FsyncError (fsyncgate: flush failures are fatal for the handle)
+   PASS the error message says the outcome is unknown  - flush failed after the commit point, outcome unknown; reopen
+   next put on the same handle -> Poisoned: an earlier fsync failed; reopen the store to recover
+   PASS handle is poisoned: a further put raises ad.Poisoned (no blind fsync retry)
+   disk right after the failed put (nothing cleaned up, nothing deleted):
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 2 64964645113bada3a84bc870fc0c6a6eedf8fcdcbffd28cb22d3de96680d8f86 c0d7874e
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   PASS CURRENT already names v2 (the rename happened before the flush failed)  - CURRENT=v2
+   PASS v000002.dat was NOT deleted by the failed put
+   PASS journal: BEGIN v1->v2 without COMMIT (in flight)
+
+== Reopen with a healthy file system -> recovery decides from what is on disk
+   recovery report: rolled_forward=['doc'], rolled_back=[], tmp_removed=0, fell_back=[], degraded=[], journal=ok
+   disk after recovery:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 2 64964645113bada3a84bc870fc0c6a6eedf8fcdcbffd28cb22d3de96680d8f86 c0d7874e
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: empty [ok]
+   get('doc') = 64B of 0x42 ('B')
+   PASS recovery reports rolled_forward for the document  - ['doc']
+   PASS get() == B exactly (64 bytes of 0x42)
+   PASS v2 present and CURRENT names v2
+   PASS previous version v1 still present
+   PASS no temp files, no open transactions left
+   PASS a further normal put(C) works -> v3  - v3
+   after put(C):
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 3 dec3faa2be66883475d12ee20f9d2345b3688ca191c029f91272ca49eeb92572 e9ff1ccb
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     v000003.dat                       132 B
+     journal.wal: BEGIN(v2->v3), COMMIT() [ok]
+
+== CLI path: real child process, same injected EIO, then plain CLI get
+   child: python -c <inject EIO on dir fsync after CURRENT rename; atomicdocs.main> <root> put doc B.bin
+   exit code 4, stderr: OUTCOME UNKNOWN: flush failed after the commit point, outcome unknown; reopen to let recovery decide: injected EIO
+   PASS CLI put exits with code 4  - rc=4
+   PASS CLI prints OUTCOME UNKNOWN
+   python atomicdocs.py <root> get doc  -> rc=0, 64B of 0x42 ('B')
+   PASS CLI get after reopen (recovery) returns exactly B
+      history: {'version': 1, 'bytes': 64, 'valid': True, 'current': False}
+      history: {'version': 2, 'bytes': 64, 'valid': True, 'current': True}
+   PASS CLI history: v1 and v2 both valid, v2 current
+
+== Power loss after the failed flush (SimFS)
+   The EIO means: the directory entry change (CURRENT -> v2) may or may not have
+   reached the disk. SimFS replays the same put(B) with the same fault (the failed
+   fsync emits no durability barrier) and enumerates every disk state a power cut
+   at that moment could leave; the REAL recovery code reads each one.
+   PASS SimFS replay: put raised CommitUnknownFsync  - CommitUnknownFsync
+      k=14  write 91B .CURRENT.12872.e947ea42.tmp
+      k=15  fsync .CURRENT.12872.e947ea42.tmp
+      k=16  rename .CURRENT.12872.e947ea42.tmp -> CURRENT
+      k=16  fsync dir doc -> EIO (injected, no barrier)
+   power cut after the rename, before a successful directory flush:
+      3 distinct disk states -> A=2 B=1
+   PASS every state recovers to exactly A or exactly B (never mixed, never empty)  - A=2 B=1
+   PASS both outcomes really occur (A=2, B=1) -> the outcome IS unknown
+   reopen inside the simulator: recovery rolled_forward=['doc'], serves 64B of 0x42 ('B')
+   power cut DURING recovery: 7 distinct states -> A=2 B=5
+   PASS power cut during recovery -> still only A or B  - A=2 B=5
+   power cut AFTER recovery returned: 1 distinct states -> B=1
+   PASS after recovery served B, every power-loss state is B (decision made durable)  - B=1
+
+== Assumptions
+   - the EIO is simulated (injected in the FS layer); the store code is unmodified;
+   - local file system with atomic same-directory rename; drive honours flushes;
+   - power loss is simulated by SimFS (ALICE model), not a real power cut.
+   total time 0.7s
+
+KO-04-C4 Failure after commit before flush: 24/24 checks passed -> PASS

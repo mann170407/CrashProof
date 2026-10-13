@@ -1,0 +1,124 @@
+{
+ "fsync EIO at each of 6 fsyncs in put()": {
+  "pass": true,
+  "detail": "raised + poisoned every time; recovered to OLD,OLD,OLD,OLD,NEW,NEW"
+ },
+ "fsync_eio_detail": [
+  [
+   1,
+   true,
+   false,
+   "OLD"
+  ],
+  [
+   2,
+   true,
+   false,
+   "OLD"
+  ],
+  [
+   3,
+   true,
+   false,
+   "OLD"
+  ],
+  [
+   4,
+   true,
+   false,
+   "OLD"
+  ],
+  [
+   5,
+   true,
+   false,
+   "NEW"
+  ],
+  [
+   6,
+   true,
+   false,
+   "NEW"
+  ]
+ ],
+ "disk full (ENOSPC) mid-write": {
+  "pass": true,
+  "detail": "clean abort, no temp files left, document unchanged, store still writable"
+ },
+ "short writes are completed": {
+  "pass": true,
+  "detail": "100 KB written in 1/3 chunks"
+ },
+ "bit flip in committed version": {
+  "pass": true,
+  "detail": "SHA-256 mismatch detected; fell back to v1 and flagged degraded: CURRENT -> v2 unusable: SHA-256 mismatch"
+ },
+ "journal torn": {
+  "pass": true,
+  "detail": "journal classified 'torn_tail', store opened, doc intact"
+ },
+ "journal zeros": {
+  "pass": true,
+  "detail": "journal classified 'torn_tail', store opened, doc intact"
+ },
+ "journal mid": {
+  "pass": true,
+  "detail": "journal classified 'corrupt', store opened, doc intact"
+ },
+ "CURRENT torn": {
+  "pass": true,
+  "detail": "rebuilt from newest verified version"
+ },
+ "CURRENT garbage": {
+  "pass": true,
+  "detail": "rebuilt from newest verified version"
+ },
+ "CURRENT deleted": {
+  "pass": true,
+  "detail": "rebuilt from newest verified version"
+ },
+ "16 concurrent writers, one document": {
+  "pass": true,
+  "detail": "all exited 0, versions 1..17, final = one writer's exact payload"
+ },
+ "8 concurrent writers, distinct documents": {
+  "pass": true,
+  "detail": ""
+ },
+ "recovery is idempotent": {
+  "pass": true,
+  "detail": "1st run rolled forward, 2nd run found nothing to do"
+ },
+ "non-fsync error after the commit point": {
+  "pass": true,
+  "detail": "raised CommitUnknown, poisoned, nothing deleted; recovery kept the new version"
+ },
+ "disk full on the completion record": {
+  "pass": true,
+  "detail": "put() returned v2 (already durable), handle poisoned for reopen, no duplicate version"
+ },
+ "only version corrupted": {
+  "pass": true,
+  "detail": "files kept, reported degraded, get() raises CorruptVersion instead of returning nothing"
+ },
+ "8 processes create the same new document": {
+  "pass": true,
+  "detail": "10 trials x 8 writers, 0 failures"
+ },
+ "reader racing writer + garbage collection": {
+  "pass": true,
+  "detail": "22194 reads during 300 saves, 0 errors"
+ },
+ "compare-and-swap conflict": {
+  "pass": true,
+  "detail": "stale expect raised Conflict (API + CLI exit 3), document unchanged, no new version file, no BEGIN journaled; matching expect then commits"
+ },
+ "directory fsync fails after the CURRENT rename": {
+  "pass": true,
+  "detail": "raised CommitUnknownFsync (CommitUnknown + FsyncError), poisoned, v2 kept; reopen rolled forward to NEW"
+ },
+ "crash before the CURRENT rename": {
+  "pass": true,
+  "detail": "v2 + CURRENT temp were on disk; recovery rolled back to OLD and removed both"
+ }
+}

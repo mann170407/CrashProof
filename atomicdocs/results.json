@@ -1,0 +1,66 @@
+{
+ "crash_matrix": [
+  {
+   "point": "after_begin",
+   "old": 40,
+   "new": 0,
+   "corrupt": 0,
+   "trials": 40
+  },
+  {
+   "point": "torn_data",
+   "old": 40,
+   "new": 0,
+   "corrupt": 0,
+   "trials": 40
+  },
+  {
+   "point": "before_data_fsync",
+   "old": 40,
+   "new": 0,
+   "corrupt": 0,
+   "trials": 40
+  },
+  {
+   "point": "after_data_rename",
+   "old": 40,
+   "new": 0,
+   "corrupt": 0,
+   "trials": 40
+  },
+  {
+   "point": "torn_pointer",
+   "old": 40,
+   "new": 0,
+   "corrupt": 0,
+   "trials": 40
+  },
+  {
+   "point": "before_pointer_rename",
+   "old": 40,
+   "new": 0,
+   "corrupt": 0,
+   "trials": 40
+  },
+  {
+   "point": "after_pointer_rename",
+   "old": 0,
+   "new": 40,
+   "corrupt": 0,
+   "trials": 40
+  },
+  {
+   "point": "after_commit",
+   "old": 0,
+   "new": 40,
+   "corrupt": 0,
+   "trials": 40
+  }
+ ],
+ "naive": {
+  "old": 0,
+  "new": 0,
+  "corrupt": 40,
+  "trials": 40
+ }
+}

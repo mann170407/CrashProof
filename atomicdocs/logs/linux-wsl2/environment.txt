@@ -1,0 +1,4 @@
+Linux LAPTOP-VS1B2Q3Q 6.18.54.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Tue Oct  6 19:13:07 UTC 2026 x86_64 GNU/Linux
+PRETTY_NAME="Ubuntu 26.04.1 LTS"
+Python 3.14.4
+TMPDIR=/home/wsluser/crashproof-ext4run/tmp fs=ext2/ext3

@@ -1,0 +1,10 @@
+# dependencies (restore with: cd ui/web && npm install)
+node_modules/
+# Python caches
+__pycache__/
+*.pyc
+# local editor / assistant settings
+.claude/
+*.tsbuildinfo
+# backend runtime cache (regenerated on demand)
+ui/.cache/

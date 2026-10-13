@@ -1,0 +1,246 @@
+{
+ "platform": {
+  "id": "windows",
+  "label": "Windows 11 \u00b7 NTFS",
+  "kernel": "10.0.26300",
+  "fs": "NTFS",
+  "python": "3.13.5",
+  "native": {
+   "create": "_wopen(O_CREAT|O_EXCL|O_BINARY)",
+   "write": "WriteFile",
+   "fsync": "FlushFileBuffers",
+   "fsync_dir": "FlushFileBuffers(directory handle)",
+   "rename": "MoveFileExW(REPLACE_EXISTING|WRITE_THROUGH)",
+   "unlink": "DeleteFileW",
+   "mkdir": "CreateDirectoryW",
+   "lock": "LockFileEx",
+   "unlock": "UnlockFileEx",
+   "read": "CreateFileW(FILE_SHARE_DELETE) + ReadFile",
+   "open_trunc": "_wopen(O_CREAT|O_TRUNC|O_BINARY)"
+  },
+  "caveats": [
+   "Windows has no fsync of a directory: the store flushes a directory handle (FlushFileBuffers) and renames with MOVEFILE_WRITE_THROUGH."
+  ]
+ },
+ "recordedAt": "2026-10-13T11:27:01+0530",
+ "source": "http://127.0.0.1:8765",
+ "fixtures": [
+  {
+   "name": "info",
+   "method": "GET",
+   "path": "/api/info",
+   "body": null,
+   "pass": null,
+   "ms": 0
+  },
+  {
+   "name": "results",
+   "method": "GET",
+   "path": "/api/results",
+   "body": null,
+   "pass": null,
+   "ms": 68
+  },
+  {
+   "name": "powerloss",
+   "method": "GET",
+   "path": "/api/powerloss",
+   "body": null,
+   "pass": null,
+   "ms": 30
+  },
+  {
+   "name": "plug-after_begin",
+   "method": "POST",
+   "path": "/api/scenario/plug",
+   "body": {
+    "crashAt": "after_begin",
+    "mode": "atomic"
+   },
+   "pass": true,
+   "ms": 152
+  },
+  {
+   "name": "plug-torn_data",
+   "method": "POST",
+   "path": "/api/scenario/plug",
+   "body": {
+    "crashAt": "torn_data",
+    "mode": "atomic"
+   },
+   "pass": true,
+   "ms": 126
+  },
+  {
+   "name": "plug-before_data_fsync",
+   "method": "POST",
+   "path": "/api/scenario/plug",
+   "body": {
+    "crashAt": "before_data_fsync",
+    "mode": "atomic"
+   },
+   "pass": true,
+   "ms": 136
+  },
+  {
+   "name": "plug-after_data_rename",
+   "method": "POST",
+   "path": "/api/scenario/plug",
+   "body": {
+    "crashAt": "after_data_rename",
+    "mode": "atomic"
+   },
+   "pass": true,
+   "ms": 124
+  },
+  {
+   "name": "plug-torn_pointer",
+   "method": "POST",
+   "path": "/api/scenario/plug",
+   "body": {
+    "crashAt": "torn_pointer",
+    "mode": "atomic"
+   },
+   "pass": true,
+   "ms": 132
+  },
+  {
+   "name": "plug-before_pointer_rename",
+   "method": "POST",
+   "path": "/api/scenario/plug",
+   "body": {
+    "crashAt": "before_pointer_rename",
+    "mode": "atomic"
+   },
+   "pass": true,
+   "ms": 146
+  },
+  {
+   "name": "plug-after_pointer_rename",
+   "method": "POST",
+   "path": "/api/scenario/plug",
+   "body": {
+    "crashAt": "after_pointer_rename",
+    "mode": "atomic"
+   },
+   "pass": true,
+   "ms": 132
+  },
+  {
+   "name": "plug-after_commit",
+   "method": "POST",
+   "path": "/api/scenario/plug",
+   "body": {
+    "crashAt": "after_commit",
+    "mode": "atomic"
+   },
+   "pass": true,
+   "ms": 163
+  },
+  {
+   "name": "plug-none",
+   "method": "POST",
+   "path": "/api/scenario/plug",
+   "body": {
+    "crashAt": null,
+    "mode": "atomic"
+   },
+   "pass": true,
+   "ms": 137
+  },
+  {
+   "name": "plug-naive-torn_data",
+   "method": "POST",
+   "path": "/api/scenario/plug",
+   "body": {
+    "crashAt": "torn_data",
+    "mode": "naive"
+   },
+   "pass": true,
+   "ms": 31
+  },
+  {
+   "name": "plug-naive-after_trunc",
+   "method": "POST",
+   "path": "/api/scenario/plug",
+   "body": {
+    "crashAt": "after_trunc",
+    "mode": "naive"
+   },
+   "pass": true,
+   "ms": 46
+  },
+  {
+   "name": "c1",
+   "method": "POST",
+   "path": "/api/scenario/c1",
+   "body": {},
+   "pass": true,
+   "ms": 184
+  },
+  {
+   "name": "c2",
+   "method": "POST",
+   "path": "/api/scenario/c2",
+   "body": {},
+   "pass": true,
+   "ms": 936
+  },
+  {
+   "name": "c3",
+   "method": "POST",
+   "path": "/api/scenario/c3",
+   "body": {},
+   "pass": true,
+   "ms": 692
+  },
+  {
+   "name": "c4",
+   "method": "POST",
+   "path": "/api/scenario/c4",
+   "body": {},
+   "pass": true,
+   "ms": 241
+  },
+  {
+   "name": "c5-recover_after_tmp_unlink",
+   "method": "POST",
+   "path": "/api/scenario/c5",
+   "body": {
+    "crashPoint": "recover_after_tmp_unlink"
+   },
+   "pass": true,
+   "ms": 160
+  },
+  {
+   "name": "c5-recover_after_version_unlink",
+   "method": "POST",
+   "path": "/api/scenario/c5",
+   "body": {
+    "crashPoint": "recover_after_version_unlink"
+   },
+   "pass": true,
+   "ms": 170
+  },
+  {
+   "name": "c5-recover_after_pointer_rewrite",
+   "method": "POST",
+   "path": "/api/scenario/c5",
+   "body": {
+    "crashPoint": "recover_after_pointer_rewrite"
+   },
+   "pass": true,
+   "ms": 172
+  },
+  {
+   "name": "c5-recover_before_checkpoint",
+   "method": "POST",
+   "path": "/api/scenario/c5",
+   "body": {
+    "crashPoint": "recover_before_checkpoint"
+   },
+   "pass": true,
+   "ms": 162
+  }
+ ]
+}

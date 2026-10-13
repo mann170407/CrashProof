@@ -1,0 +1,164 @@
+{
+ "id": "KO-04-C1",
+ "title": "Commit-point crash matrix",
+ "pass": true,
+ "passed": 31,
+ "total": 31,
+ "checks": [
+  {
+   "check": "before_pointer_rename: child process died with exit code 137 (os._exit, no cleanup)",
+   "pass": true,
+   "detail": "rc=137"
+  },
+  {
+   "check": "before_pointer_rename: journal holds BEGIN v1->v2 without COMMIT",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "before_pointer_rename: v000002.dat (B, copy-on-write) already on disk",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "before_pointer_rename: .CURRENT temp left behind, CURRENT still names v1",
+   "pass": true,
+   "detail": "tmp=['.CURRENT.536.b8e0b4c6.tmp'] CURRENT=v1"
+  },
+  {
+   "check": "before_pointer_rename: get() == A exactly (64 bytes)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "before_pointer_rename: no temp files left",
+   "pass": true,
+   "detail": "[]"
+  },
+  {
+   "check": "before_pointer_rename: recovery reports rolled_back",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "before_pointer_rename: uncommitted v2 removed, CURRENT names v1",
+   "pass": true,
+   "detail": "['.lock', 'CURRENT', 'v000001.dat']"
+  },
+  {
+   "check": "before_pointer_rename: v1 file byte-identical throughout (copy-on-write, never overwritten)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "before_pointer_rename: store is writable again after recovery",
+   "pass": true,
+   "detail": "next put -> v2"
+  },
+  {
+   "check": "after_pointer_rename: child process died with exit code 137 (os._exit, no cleanup)",
+   "pass": true,
+   "detail": "rc=137"
+  },
+  {
+   "check": "after_pointer_rename: journal holds BEGIN v1->v2 without COMMIT",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "after_pointer_rename: v000002.dat (B, copy-on-write) already on disk",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "after_pointer_rename: rename already happened - CURRENT names v2, no temp left",
+   "pass": true,
+   "detail": "tmp=[] CURRENT=v2"
+  },
+  {
+   "check": "after_pointer_rename: get() == B exactly (64 bytes)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "after_pointer_rename: no temp files left",
+   "pass": true,
+   "detail": "[]"
+  },
+  {
+   "check": "after_pointer_rename: recovery reports rolled_forward",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "after_pointer_rename: CURRENT names v2, v2 present",
+   "pass": true,
+   "detail": "['.lock', 'CURRENT', 'v000001.dat', 'v000002.dat']"
+  },
+  {
+   "check": "after_pointer_rename: previous version v1 still kept",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "after_pointer_rename: v1 file byte-identical throughout (copy-on-write, never overwritten)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "after_pointer_rename: store is writable again after recovery",
+   "pass": true,
+   "detail": "next put -> v3"
+  },
+  {
+   "check": "matrix torn_pointer: 20/20 runs recovered to exactly A",
+   "pass": true,
+   "detail": "A x20"
+  },
+  {
+   "check": "matrix before_pointer_rename: 20/20 runs recovered to exactly A",
+   "pass": true,
+   "detail": "A x20"
+  },
+  {
+   "check": "matrix after_pointer_rename: 20/20 runs recovered to exactly B",
+   "pass": true,
+   "detail": "B x20"
+  },
+  {
+   "check": "matrix after_commit: 20/20 runs recovered to exactly B",
+   "pass": true,
+   "detail": "B x20"
+  },
+  {
+   "check": "SimFS W1: cut just before the CURRENT rename -> only A",
+   "pass": true,
+   "detail": "A=2"
+  },
+  {
+   "check": "SimFS W1: cut just after the rename (dir not flushed) -> only A/B",
+   "pass": true,
+   "detail": "A=2 B=1"
+  },
+  {
+   "check": "SimFS W1: cut after the directory fsync -> only B",
+   "pass": true,
+   "detail": "B=1"
+  },
+  {
+   "check": "SimFS W0: cut just before the CURRENT rename -> only A",
+   "pass": true,
+   "detail": "A=2"
+  },
+  {
+   "check": "SimFS W0: cut just after the rename (dir not flushed) -> only A/B",
+   "pass": true,
+   "detail": "A=2 B=4"
+  },
+  {
+   "check": "SimFS W0: cut after the directory fsync -> only B",
+   "pass": true,
+   "detail": "B=1"
+  }
+ ]
+}

@@ -1,0 +1,145 @@
+KO-04-C1  Commit-point crash matrix
+A = 64B of 0x41 ('A'), B = 64B of 0x42 ('B'), document 'doc', real local file system, temp directories only
+
+== Why: rename(2) of CURRENT is the single commit point
+   put(B) never touches v1. It writes B to a NEW file v000002.dat (copy-on-write),
+   fsyncs it, then writes a one-line pointer to a temp file .CURRENT.<pid>.tmp,
+   fsyncs it and rename()s it over CURRENT (MoveFileEx REPLACE|WRITE_THROUGH on
+   Windows). rename replaces the directory entry atomically: any observer sees
+   the old CURRENT or the new one, never a mix. So:
+     dies BEFORE the rename -> CURRENT still names v1 -> A; recovery deletes the
+                               orphan v2 + temp (rolled back)
+     dies AFTER the rename  -> CURRENT names v2 -> B; recovery verifies v2's
+                               SHA-256, keeps it, flushes the directory (rolled forward)
+   Recovery's rule: truth = CURRENT if it parses and its target verifies. The
+   journal (BEGIN without COMMIT) only says WHICH saves were in flight.
+
+== Crash point before_pointer_rename  (expected after recovery: A)
+   put A in-process -> v1   (64B of 0x41 ('A'))
+   disk before the failing save:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2eef02e7004ee2627c0ab9d78c04401a1993ff58bce4f032e34b9ea870c282a9 a6505128
+     v000001.dat                       132 B
+     journal.wal: BEGIN(v0->v1), COMMIT() [ok]
+   child: python atomicdocs.py <root> put doc B.bin   [ATOMICDOCS_CRASH_AT=before_pointer_rename]
+   PASS before_pointer_rename: child process died with exit code 137 (os._exit, no cleanup)  - rc=137
+   disk right after the crash (nobody has cleaned up):
+     .CURRENT.12680.81f11f6a.tmp        91 B
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2eef02e7004ee2627c0ab9d78c04401a1993ff58bce4f032e34b9ea870c282a9 a6505128
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   PASS before_pointer_rename: journal holds BEGIN v1->v2 without COMMIT
+   PASS before_pointer_rename: v000002.dat (B, copy-on-write) already on disk
+   PASS before_pointer_rename: .CURRENT temp left behind, CURRENT still names v1  - tmp=['.CURRENT.12680.81f11f6a.tmp'] CURRENT=v1
+   reopen the store -> recovery runs
+   recovery report: rolled_forward=[], rolled_back=['doc'], tmp_removed=1, fell_back=[], degraded=[], journal=ok
+   disk after recovery:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2eef02e7004ee2627c0ab9d78c04401a1993ff58bce4f032e34b9ea870c282a9 a6505128
+     v000001.dat                       132 B
+     journal.wal: empty [ok]
+   get('doc') = 64B of 0x41 ('A')
+   PASS before_pointer_rename: get() == A exactly (64 bytes)
+   PASS before_pointer_rename: no temp files left  - []
+   PASS before_pointer_rename: recovery reports rolled_back
+   PASS before_pointer_rename: uncommitted v2 removed, CURRENT names v1  - ['.lock', 'CURRENT', 'v000001.dat']
+   PASS before_pointer_rename: v1 file byte-identical throughout (copy-on-write, never overwritten)
+   PASS before_pointer_rename: store is writable again after recovery  - next put -> v2
+
+== Crash point after_pointer_rename  (expected after recovery: B)
+   put A in-process -> v1   (64B of 0x41 ('A'))
+   disk before the failing save:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 1 2eef02e7004ee2627c0ab9d78c04401a1993ff58bce4f032e34b9ea870c282a9 a6505128
+     v000001.dat                       132 B
+     journal.wal: BEGIN(v0->v1), COMMIT() [ok]
+   child: python atomicdocs.py <root> put doc B.bin   [ATOMICDOCS_CRASH_AT=after_pointer_rename]
+   PASS after_pointer_rename: child process died with exit code 137 (os._exit, no cleanup)  - rc=137
+   disk right after the crash (nobody has cleaned up):
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 2 64964645113bada3a84bc870fc0c6a6eedf8fcdcbffd28cb22d3de96680d8f86 c0d7874e
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: BEGIN(v1->v2) [ok]
+   PASS after_pointer_rename: journal holds BEGIN v1->v2 without COMMIT
+   PASS after_pointer_rename: v000002.dat (B, copy-on-write) already on disk
+   PASS after_pointer_rename: rename already happened - CURRENT names v2, no temp left  - tmp=[] CURRENT=v2
+   reopen the store -> recovery runs
+   recovery report: rolled_forward=['doc'], rolled_back=[], tmp_removed=0, fell_back=[], degraded=[], journal=ok
+   disk after recovery:
+     .lock                               0 B
+     CURRENT                            91 B  -> ADOC-CURRENT 2 2 64964645113bada3a84bc870fc0c6a6eedf8fcdcbffd28cb22d3de96680d8f86 c0d7874e
+     v000001.dat                       132 B
+     v000002.dat                       132 B
+     journal.wal: empty [ok]
+   get('doc') = 64B of 0x42 ('B')
+   PASS after_pointer_rename: get() == B exactly (64 bytes)
+   PASS after_pointer_rename: no temp files left  - []
+   PASS after_pointer_rename: recovery reports rolled_forward
+   PASS after_pointer_rename: CURRENT names v2, v2 present  - ['.lock', 'CURRENT', 'v000001.dat', 'v000002.dat']
+   PASS after_pointer_rename: previous version v1 still kept
+   PASS after_pointer_rename: v1 file byte-identical throughout (copy-on-write, never overwritten)
+   PASS after_pointer_rename: store is writable again after recovery  - next put -> v3
+
+== Crash matrix: real child process killed at each point, 20 repetitions each
+   
+   crash point            | expected | got      | recovery action             | pass
+   -----------------------+----------+----------+-----------------------------+-----
+   torn_pointer           | A        | A x20    | rolled_back                 | PASS
+   before_pointer_rename  | A        | A x20    | rolled_back                 | PASS
+   after_pointer_rename   | B        | B x20    | rolled_forward              | PASS
+   after_commit           | B        | B x20    | nothing open                | PASS
+   
+   torn_pointer           half a pointer in the temp file; rename never happened
+   before_pointer_rename  temp pointer complete + fsynced; rename never happened
+   after_pointer_rename   rename happened; directory not yet fsynced
+   after_commit           COMMIT record written; GC not yet run
+   (80 child processes in 14.0s)
+   PASS matrix torn_pointer: 20/20 runs recovered to exactly A  - A x20
+   PASS matrix before_pointer_rename: 20/20 runs recovered to exactly A  - A x20
+   PASS matrix after_pointer_rename: 20/20 runs recovered to exactly B  - B x20
+   PASS matrix after_commit: 20/20 runs recovered to exactly B  - B x20
+
+== Power loss at the same points (SimFS: unflushed writes / directory entries may be lost)
+   A process kill keeps the page cache; a power cut does not. SimFS records every
+   system call of put(B) as micro-ops and enumerates every disk state a power cut
+   could leave (ALICE model), then runs the REAL recovery code on each one.
+   
+   model W1 - atomic rename (ext4/xfs/btrfs/NTFS)
+     syscalls around the commit point:
+       k=12  create .CURRENT.28668.aead3a05.tmp
+       k=14  write 91B .CURRENT.28668.aead3a05.tmp
+       k=15  fsync .CURRENT.28668.aead3a05.tmp
+       k=16  rename .CURRENT.28668.aead3a05.tmp -> CURRENT    <-- COMMIT POINT
+       k=17  fsync dir doc
+     cut just before the CURRENT rename            2 distinct states (exhaustive): A=2       must be A
+   PASS SimFS W1: cut just before the CURRENT rename -> only A  - A=2
+     cut just after the rename (dir not flushed)   3 distinct states (exhaustive): A=2 B=1   must be A or B
+   PASS SimFS W1: cut just after the rename (dir not flushed) -> only A/B  - A=2 B=1
+     cut after the directory fsync                 1 distinct states (exhaustive): B=1       must be B
+   PASS SimFS W1: cut after the directory fsync -> only B  - B=1
+   
+   model W0 - worst case: rename = delete dst, delete src, insert dst
+     syscalls around the commit point:
+       k=13  create .CURRENT.28668.019032f1.tmp
+       k=15  write 91B .CURRENT.28668.019032f1.tmp
+       k=16  fsync .CURRENT.28668.019032f1.tmp
+       k=19  rename .CURRENT.28668.019032f1.tmp -> CURRENT    <-- COMMIT POINT
+       k=20  fsync dir doc
+     cut just before the CURRENT rename            2 distinct states (exhaustive): A=2       must be A
+   PASS SimFS W0: cut just before the CURRENT rename -> only A  - A=2
+     cut just after the rename (dir not flushed)   6 distinct states (exhaustive): A=2 B=4   must be A or B
+   PASS SimFS W0: cut just after the rename (dir not flushed) -> only A/B  - A=2 B=4
+     cut after the directory fsync                 1 distinct states (exhaustive): B=1       must be B
+   PASS SimFS W0: cut after the directory fsync -> only B  - B=1
+
+== Assumptions
+   - controlled failure = os._exit(137) in a real child process at a named point
+     (ATOMICDOCS_CRASH_AT); the OS keeps the page cache, so this is a process crash;
+   - local file system with atomic same-directory rename (NTFS here; ext4/xfs/APFS);
+   - power loss is simulated (SimFS), not a real power cut; drive honours flushes.
+   total time 14.8s
+
+KO-04-C1 Commit-point crash matrix: 31/31 checks passed -> PASS

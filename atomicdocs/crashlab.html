@@ -1,0 +1,206 @@
+<title>AtomicDocs Crash Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: a write's system-call timeline on the left, "pull the plug" panel on the right; summary strip above, mutation evidence below. */
+:root{
+  --bg:#f3f5f7; --panel:#ffffff; --ink:#15191e; --muted:#5b6672; --rule:#d7dde3;
+  --accent:#e8840f; --accent-soft:#fdebd3;
+  --old:#2f6db5; --new:#1f8a5b; --bad:#c8372d; --volatile:#9aa5b1;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101418; --panel:#171c22; --ink:#e7ecf1; --muted:#97a3af; --rule:#2a323b;
+  --accent:#f5a03a; --accent-soft:#3a2a14; --old:#6aa3e8; --new:#4cc38a; --bad:#f06a5f; --volatile:#5d6874; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101418; --panel:#171c22; --ink:#e7ecf1; --muted:#97a3af; --rule:#2a323b;
+  --accent:#f5a03a; --accent-soft:#3a2a14; --old:#6aa3e8; --new:#4cc38a; --bad:#f06a5f; --volatile:#5d6874; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--body);margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 56px;display:flex;flex-direction:column;gap:28px}
+header{display:flex;flex-direction:column;gap:8px;max-width:760px}
+.eyebrow{font:600 12px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+h1{font:800 clamp(30px,5vw,48px)/1.05 var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+.lede{color:var(--muted);margin:0;max-width:66ch}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.stat{background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.stat b{font:800 30px/1.1 var(--display);font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:13px}
+.stat.good b{color:var(--new)} .stat.bad b{color:var(--bad)}
+.toggle{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.toggle span{font:500 13px var(--mono);color:var(--muted);margin-right:6px}
+.toggle button{font:600 14px var(--body);padding:8px 14px;border-radius:999px;border:1px solid var(--rule);background:var(--panel);color:var(--ink);cursor:pointer}
+.toggle button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button:focus-visible,.call:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.lab{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:860px){.lab{grid-template-columns:1fr}}
+.timeline{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:10px 0;display:flex;flex-direction:column}
+.phase{font:600 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:14px 18px 6px}
+.call{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 18px;border:0;background:none;color:inherit;text-align:left;cursor:pointer;font:14px/1.35 var(--mono);width:100%}
+.call:hover{background:var(--bg)}
+.call[aria-current="true"]{background:var(--accent-soft)}
+.call .dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--volatile);justify-self:center}
+.call.barrier .dot{border-radius:2px;background:var(--ink);border-color:var(--ink);height:4px;width:18px}
+.call.commit .dot{background:var(--accent);border-color:var(--accent)}
+.call .lbl{overflow-wrap:anywhere}
+.call .n{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.call.plug .lbl::after{content:"  ⏚ power cut here";color:var(--accent);font-weight:600}
+.panel{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:14px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px)}
+@media (max-width:860px){.panel{position:static}}
+.panel h2{font:700 22px/1.2 var(--display);margin:0;text-wrap:balance}
+.panel .sub{margin:0;color:var(--muted);font-size:14px}
+.grid{display:flex;flex-wrap:wrap;gap:4px;padding:4px 0}
+.cell{width:16px;height:16px;border-radius:3px}
+.cell.OLD{background:var(--old)} .cell.NEW{background:var(--new)} .cell.BAD{background:var(--bad)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.verdict{font:600 15px var(--body);padding:10px 12px;border-radius:8px;border:1px solid var(--rule)}
+.verdict.ok{border-color:var(--new);color:var(--new)} .verdict.fail{border-color:var(--bad);color:var(--bad)}
+.why{margin:0;font-size:14px}
+.ack{font:600 12px var(--mono);padding:3px 8px;border-radius:999px;border:1px solid var(--rule);color:var(--muted);align-self:flex-start}
+.ack.on{border-color:var(--new);color:var(--new)}
+section.mut{display:flex;flex-direction:column;gap:12px}
+section.mut h2{font:700 24px/1.2 var(--display);margin:0}
+section.mut p{margin:0;color:var(--muted);max-width:72ch}
+.tablewrap{overflow-x:auto;background:var(--panel);border:1px solid var(--rule);border-radius:12px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--rule)}
+th{font:600 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+td.num{font:500 14px var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+th.num{text-align:right}
+tr:last-child td{border-bottom:0}
+.z{color:var(--new)} .nz{color:var(--bad);font-weight:600}
+footer{color:var(--muted);font-size:13px;max-width:80ch}
+@media (prefers-reduced-motion: no-preference){.cell{animation:pop .25s ease both}@keyframes pop{from{transform:scale(.6)}to{transform:scale(1)}}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Kernel Ops · OSH021 · simulated power loss</div>
+    <h1>Pull the plug at any system call</h1>
+    <p class="lede">Each row is one system call that a single save makes. Pick a row to cut the power right after it. The panel shows every disk state that power loss could legally leave behind there, and what AtomicDocs recovery read back from each one. These are recorded results from <code>crash_explorer.py</code>, not an animation.</p>
+  </header>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="toggle" role="group" aria-label="Store under test">
+    <span>store under test</span>
+    <button id="t-ours" aria-pressed="true">AtomicDocs</button>
+    <button id="t-naive" aria-pressed="false">Naive overwrite</button>
+  </div>
+
+  <div class="lab">
+    <div class="timeline" id="timeline" role="list"></div>
+    <aside class="panel" aria-live="polite">
+      <span class="ack" id="ack">not yet acknowledged</span>
+      <h2 id="p-title"></h2>
+      <p class="sub" id="p-sub"></p>
+      <div class="grid" id="p-grid" aria-hidden="true"></div>
+      <div class="legend"><span><i style="background:var(--old)"></i>previous version</span><span><i style="background:var(--new)"></i>new version</span><span><i style="background:var(--bad)"></i>corrupted mixture</span></div>
+      <div class="verdict" id="p-verdict"></div>
+      <p class="why" id="p-why"></p>
+    </aside>
+  </div>
+
+  <section class="mut">
+    <h2>Which fsync calls actually matter</h2>
+    <p>We deleted one flush at a time and explored again. No single deletion produced a corrupted document: checksums catch every torn or missing file. Two deletions lose saves that were already acknowledged. Turning checksums off as well finally produces corrupted states, which shows the tester can catch real bugs.</p>
+    <div class="tablewrap"><table id="mut"></table></div>
+  </section>
+
+  <footer id="foot"></footer>
+</div>
+
+<script>
+const DATA = {"trace_ours": [{"after": "start", "k": 0, "acked": false, "OLD": 1, "NEW": 0, "BAD": 0, "states": 1, "optional": 0}, {"after": "write 172B journal.wal", "k": 2, "acked": false, "OLD": 4, "NEW": 0, "BAD": 0, "states": 4, "optional": 2}, {"after": "fsync journal.wal", "k": 3, "acked": false, "OLD": 1, "NEW": 0, "BAD": 0, "states": 1, "optional": 0}, {"after": "create .v000003.dat.27788.46723b36.tmp", "k": 5, "acked": false, "OLD": 4, "NEW": 0, "BAD": 0, "states": 4, "optional": 2}, {"after": "write 1368B .v000003.dat.27788.46723b36.tmp", "k": 9, "acked": false, "OLD": 64, "NEW": 0, "BAD": 0, "states": 64, "optional": 6}, {"after": "fsync .v000003.dat.27788.46723b36.tmp", "k": 10, "acked": false, "OLD": 2, "NEW": 0, "BAD": 0, "states": 2, "optional": 1}, {"after": "rename .v000003.dat.27788.46723b36.tmp -> v000003.dat", "k": 11, "acked": false, "OLD": 4, "NEW": 0, "BAD": 0, "states": 4, "optional": 2}, {"after": "fsync dir report", "k": 12, "acked": false, "OLD": 1, "NEW": 0, "BAD": 0, "states": 1, "optional": 0}, {"after": "create .CURRENT.27788.7a688130.tmp", "k": 14, "acked": false, "OLD": 4, "NEW": 0, "BAD": 0, "states": 4, "optional": 2}, {"after": "write 91B .CURRENT.27788.7a688130.tmp", "k": 16, "acked": false, "OLD": 16, "NEW": 0, "BAD": 0, "states": 16, "optional": 4}, {"after": "fsync .CURRENT.27788.7a688130.tmp", "k": 17, "acked": false, "OLD": 2, "NEW": 0, "BAD": 0, "states": 2, "optional": 1}, {"after": "rename .CURRENT.27788.7a688130.tmp -> CURRENT", "k": 18, "acked": false, "OLD": 2, "NEW": 2, "BAD": 0, "states": 4, "optional": 2}, {"after": "fsync dir report", "k": 19, "acked": false, "OLD": 0, "NEW": 1, "BAD": 0, "states": 1, "optional": 0}, {"after": "write 69B journal.wal", "k": 21, "acked": false, "OLD": 0, "NEW": 4, "BAD": 0, "states": 4, "optional": 2}, {"after": "fsync journal.wal", "k": 22, "acked": true, "OLD": 0, "NEW": 1, "BAD": 0, "states": 1, "optional": 0}], "trace_naive": [{"after": "start", "k": 0, "acked": false, "OLD": 1, "NEW": 0, "BAD": 0, "states": 1, "optional": 0}, {"after": "open O_TRUNC report.txt", "k": 1, "acked": false, "OLD": 1, "NEW": 0, "BAD": 1, "states": 2, "optional": 1}, {"after": "write 1300B report.txt", "k": 5, "acked": true, "OLD": 2, "NEW": 2, "BAD": 28, "states": 32, "optional": 5}], "mutations": {"data_fsync": {"OLD": 72, "NEW": 3, "CORRUPT": 0, "ERROR": 0, "DURABILITY_VIOLATION": 8, "DEAD": 0, "states": 75, "checks": 1258, "crash_points": 14, "micro_ops": 21, "mode": "exhaustive"}, "data_dirsync": {"OLD": 24, "NEW": 3, "CORRUPT": 0, "ERROR": 0, "DURABILITY_VIOLATION": 0, "DEAD": 0, "states": 27, "checks": 190, "crash_points": 14, "micro_ops": 21, "mode": "exhaustive"}, "ptr_fsync": {"OLD": 16, "NEW": 9, "CORRUPT": 0, "ERROR": 0, "DURABILITY_VIOLATION": 0, "DEAD": 0, "states": 25, "checks": 181, "crash_points": 14, "micro_ops": 21, "mode": "exhaustive"}, "ptr_dirsync": {"OLD": 20, "NEW": 3, "CORRUPT": 0, "ERROR": 0, "DURABILITY_VIOLATION": 2, "DEAD": 0, "states": 23, "checks": 127, "crash_points": 14, "micro_ops": 21, "mode": "exhaustive"}, "journal_fsync": {"OLD": 42, "NEW": 7, "CORRUPT": 0, "ERROR": 0, "DURABILITY_VIOLATION": 0, "DEAD": 0, "states": 49, "checks": 429, "crash_points": 13, "micro_ops": 20, "mode": "exhaustive"}, "data_fsync+no_checksums": {"OLD": 63, "NEW": 3, "CORRUPT": 9, "ERROR": 0, "DURABILITY_VIOLATION": 5, "DEAD": 0, "states": 75, "checks": 1258, "crash_points": 14, "micro_ops": 21, "mode": "exhaustive"}}, "ours_W1_small": {"OLD": 16, "NEW": 3, "CORRUPT": 0, "ERROR": 0, "DURABILITY_VIOLATION": 0, "DEAD": 0, "states": 19, "checks": 113, "crash_points": 15, "micro_ops": 22, "mode": "exhaustive"}, "summary": {"checks": 417, "naive_corrupt": 11, "naive_states": 13}};
+function phaseOf(label, i, rows){
+  if (label === "start") return "Before the save";
+  if (/CURRENT/.test(label) || (/fsync dir/.test(label) && rows.slice(0,i).some(r=>/-> CURRENT/.test(r.after)))) {
+    if (rows.slice(0,i).some(r=>/-> CURRENT/.test(r.after)) && /journal/.test(label)) return "4 · Completion record";
+    if (rows.slice(0,i).some(r=>/-> CURRENT/.test(r.after)) && !/CURRENT/.test(label)) return "3 · Commit point";
+    return "3 · Commit point";
+  }
+  if (/\.dat|fsync dir/.test(label)) return "2 · Copy-on-write data";
+  if (/journal/.test(label)) return rows.slice(0,i).some(r=>/-> CURRENT/.test(r.after)) ? "4 · Completion record" : "1 · Write-ahead intent";
+  return "Naive overwrite";
+}
+const WHY = {
+  "start":"Nothing has been written yet. The disk holds only the previous version.",
+  "write":"Data written but not flushed may be partly on disk, sector by sector, or not at all.",
+  "fsync":"A flush is a barrier: everything this file wrote before it is now guaranteed on disk.",
+  "create":"A new name in a directory is not durable until the directory itself is flushed.",
+  "rename":"rename(2) swaps a name in one atomic step, but the swap itself may not survive power loss until the directory is flushed.",
+  "fsync dir":"Flushing the directory makes its renames and new names durable.",
+  "O_TRUNC":"The old content is gone the moment the file is truncated. Any crash from here on can lose both versions."
+};
+function why(label){
+  if (label==="start") return WHY.start;
+  if (/O_TRUNC/.test(label)) return WHY.O_TRUNC;
+  if (/^fsync dir/.test(label)) return WHY["fsync dir"];
+  for (const k of ["rename","create","write","fsync"]) if (label.startsWith(k)) return WHY[k];
+  return "";
+}
+function pretty(label){ return label.replace(/\.(v\d{6}\.dat|CURRENT)\.\d+\.[0-9a-f]+\.tmp/g, ".$1.tmp"); }
+
+let mode = "ours", sel = 0;
+const $ = id => document.getElementById(id);
+
+function stats(){
+  const o = DATA.summary;
+  $("stats").innerHTML = [
+    ["good", o.checks, "distinct power-loss disk states checked"],
+    ["good", 0, "corrupted documents from AtomicDocs"],
+    ["good", 0, "acknowledged saves lost"],
+    ["bad", o.naive_corrupt + " of " + o.naive_states, "naive overwrite states corrupted, with or without fsync"]
+  ].map(([c,b,s])=>`<div class="stat ${c}"><b>${b}</b><span>${s}</span></div>`).join("");
+}
+
+function render(){
+  const rows = mode==="ours" ? DATA.trace_ours : DATA.trace_naive;
+  if (sel >= rows.length) sel = rows.length-1;
+  let html = "", last = null;
+  rows.forEach((r,i)=>{
+    const ph = mode==="ours" ? phaseOf(r.after,i,rows) : (i===0 ? "Before the save" : "Naive overwrite");
+    if (ph !== last){ html += `<div class="phase">${ph}</div>`; last = ph; }
+    const cls = ["call"];
+    if (/^fsync/.test(r.after)) cls.push("barrier");
+    if (/-> CURRENT$/.test(r.after)) cls.push("commit");
+    if (i===sel) cls.push("plug");
+    html += `<button role="listitem" class="${cls.join(" ")}" data-i="${i}" aria-current="${i===sel}"><span class="dot"></span><span class="lbl">${pretty(r.after)}</span><span class="n">${r.states} state${r.states===1?"":"s"}</span></button>`;
+  });
+  $("timeline").innerHTML = html;
+  $("timeline").querySelectorAll(".call").forEach(b=>b.onclick=()=>{sel=+b.dataset.i;render();});
+  const r = rows[sel];
+  $("p-title").textContent = "Power cut after: " + pretty(r.after);
+  $("p-sub").textContent = `${r.states} legal disk state${r.states===1?"":"s"} at this point (${r.optional} un-flushed piece${r.optional===1?"":"s"} that may or may not have landed). Each square is one state.`;
+  const cells = [];
+  for (let k=0;k<r.OLD;k++) cells.push("OLD");
+  for (let k=0;k<r.NEW;k++) cells.push("NEW");
+  for (let k=0;k<r.BAD;k++) cells.push("BAD");
+  $("p-grid").innerHTML = cells.map(c=>`<span class="cell ${c}"></span>`).join("");
+  const a = $("ack"); a.textContent = r.acked ? "save acknowledged to the app" : "save not yet acknowledged"; a.classList.toggle("on", r.acked);
+  const v = $("p-verdict");
+  const lostAck = r.acked && (r.OLD>0 || r.BAD>0);
+  if (r.BAD>0){ v.className="verdict fail"; v.textContent = `${r.BAD} of ${r.states} states are a corrupted mixture.`; }
+  else if (lostAck){ v.className="verdict fail"; v.textContent = "The save was acknowledged but can be lost."; }
+  else { v.className="verdict ok"; v.textContent = r.NEW && r.OLD ? `Every state recovers to a whole version: ${r.OLD} previous, ${r.NEW} new.` : r.NEW ? "Every state recovers to the new version." : "Every state recovers to the previous version."; }
+  $("p-why").textContent = why(r.after);
+}
+
+function mutTable(){
+  const m = DATA.mutations;
+  const name = {data_fsync:"fsync of the new version file", data_dirsync:"directory fsync after the version rename", ptr_fsync:"fsync of the CURRENT temp file", ptr_dirsync:"directory fsync after the CURRENT rename", journal_fsync:"fsync of journal records", "data_fsync+no_checksums":"version fsync AND checksum verification"};
+  let h = `<thead><tr><th>Removed</th><th class="num">States</th><th class="num">Corrupted</th><th class="num">Acknowledged saves lost</th></tr></thead><tbody>`;
+  h += `<tr><td>Nothing (full design)</td><td class="num">${DATA.ours_W1_small.states}</td><td class="num z">0</td><td class="num z">0</td></tr>`;
+  for (const [k,r] of Object.entries(m)) h += `<tr><td>${name[k]||k}</td><td class="num">${r.states}</td><td class="num ${r.CORRUPT?"nz":"z"}">${r.CORRUPT}</td><td class="num ${r.DURABILITY_VIOLATION?"nz":"z"}">${r.DURABILITY_VIOLATION}</td></tr>`;
+  $("mut").innerHTML = h + "</tbody>";
+}
+
+$("t-ours").onclick = ()=>{mode="ours";sel=0;$("t-ours").setAttribute("aria-pressed","true");$("t-naive").setAttribute("aria-pressed","false");render();};
+$("t-naive").onclick = ()=>{mode="naive";sel=DATA.trace_naive.length-1;$("t-naive").setAttribute("aria-pressed","true");$("t-ours").setAttribute("aria-pressed","false");render();};
+$("foot").innerHTML = `Model: Pillai et al. (OSDI 2014) persistence rules. Writes persist per 512-byte sector, renames are atomic but not durable until the directory is flushed (W1), and a stricter run treats rename as non-atomic (W0). Each state was written to a real directory and opened with the real recovery code. Runs: 700 B → 1.3 KB (exhaustive), 9 KB → 21 KB (sampled), first save of a new document, a save that garbage-collects, two saves in a row, and a process crash followed by recovery and then power loss at every recovery step.`;
+stats(); sel = DATA.trace_ours.findIndex(r=>/-> CURRENT$/.test(r.after)); if (sel<0) sel=0; render(); mutTable();
+</script>

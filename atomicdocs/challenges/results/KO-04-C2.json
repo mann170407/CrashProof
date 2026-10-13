@@ -1,0 +1,134 @@
+{
+ "id": "KO-04-C2",
+ "title": "Lost-update rejection",
+ "pass": true,
+ "passed": 25,
+ "total": 25,
+ "checks": [
+  {
+   "check": "both clients saw v1 = A",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "client1 CAS succeeds and creates v2",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "journal: exactly one BEGIN/COMMIT pair, for the B save (v1->v2, sha matches v2 file)",
+   "pass": true,
+   "detail": "tx 1724-1-f54f4b"
+  },
+  {
+   "check": "client2 rejected: exit code 3 + CONFLICT (expected 1, current 2)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "get() == B (client1's update survives, nothing was overwritten)",
+   "pass": true,
+   "detail": "27B 'B|owner=alice;status=review'"
+  },
+  {
+   "check": "no file anywhere in the store contains C",
+   "pass": true,
+   "detail": "hits=[]"
+  },
+  {
+   "check": "history shows exactly v1, v2 (both verify), CURRENT=v2, no temp files",
+   "pass": true,
+   "detail": "versions=[1, 2] tmp=[]"
+  },
+  {
+   "check": "journal: no BEGIN (or any record) written for C - CAS failed before the journal",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "retry commits v3 = B's status + C's tag (both updates kept)",
+   "pass": true,
+   "detail": "40B \"C'|owner=alice;status=review;tags=urgent\""
+  },
+  {
+   "check": "history now v1, v2, v3, all verify",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "round 1: exactly ONE writer commits, 11 get CONFLICT (exit 3, saw current=2)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "round 1: document == the winner's bytes exactly, CURRENT=v2",
+   "pass": true,
+   "detail": "939B 'client-02 round-1 |payload-fro'..."
+  },
+  {
+   "check": "round 1: only v1+v2 on disk, both verify, no partial/temp files",
+   "pass": true,
+   "detail": "versions=[1, 2] tmp=[]"
+  },
+  {
+   "check": "round 1: journal holds one BEGIN/COMMIT pair (the winner), none from the 11 losers",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "round 2: exactly ONE writer commits, 11 get CONFLICT (exit 3, saw current=2)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "round 2: document == the winner's bytes exactly, CURRENT=v2",
+   "pass": true,
+   "detail": "939B 'client-11 round-2 |payload-fro'..."
+  },
+  {
+   "check": "round 2: only v1+v2 on disk, both verify, no partial/temp files",
+   "pass": true,
+   "detail": "versions=[1, 2] tmp=[]"
+  },
+  {
+   "check": "round 2: journal holds one BEGIN/COMMIT pair (the winner), none from the 11 losers",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "round 3: exactly ONE writer commits, 11 get CONFLICT (exit 3, saw current=2)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "round 3: document == the winner's bytes exactly, CURRENT=v2",
+   "pass": true,
+   "detail": "939B 'client-05 round-3 |payload-fro'..."
+  },
+  {
+   "check": "round 3: only v1+v2 on disk, both verify, no partial/temp files",
+   "pass": true,
+   "detail": "versions=[1, 2] tmp=[]"
+  },
+  {
+   "check": "round 3: journal holds one BEGIN/COMMIT pair (the winner), none from the 11 losers",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "no CAS: every write still serialized - versions 2..13, journal BEGIN/COMMIT never interleave",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "no CAS: 11 of 12 updates silently LOST (count=1, not 12) - this is why CAS is needed",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "CAS + retry: all 12 increments applied exactly once (count=12, v13)",
+   "pass": true,
+   "detail": ""
+  }
+ ]
+}

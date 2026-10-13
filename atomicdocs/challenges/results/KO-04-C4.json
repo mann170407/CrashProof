@@ -1,0 +1,129 @@
+{
+ "id": "KO-04-C4",
+ "title": "Failure after commit before flush",
+ "pass": true,
+ "passed": 24,
+ "total": 24,
+ "checks": [
+  {
+   "check": "fault injected exactly once, on the directory fsync after the CURRENT rename",
+   "pass": true,
+   "detail": "injected=1"
+  },
+  {
+   "check": "put raised CommitUnknownFsync",
+   "pass": true,
+   "detail": "CommitUnknownFsync"
+  },
+  {
+   "check": "... which is an ad.CommitUnknown (outcome unknown, not 'failed')",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "... and an ad.FsyncError (fsyncgate: flush failures are fatal for the handle)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "the error message says the outcome is unknown",
+   "pass": true,
+   "detail": "flush failed after the commit point, outcome unknown; reopen"
+  },
+  {
+   "check": "handle is poisoned: a further put raises ad.Poisoned (no blind fsync retry)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "CURRENT already names v2 (the rename happened before the flush failed)",
+   "pass": true,
+   "detail": "CURRENT=v2"
+  },
+  {
+   "check": "v000002.dat was NOT deleted by the failed put",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "journal: BEGIN v1->v2 without COMMIT (in flight)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "recovery reports rolled_forward for the document",
+   "pass": true,
+   "detail": "['doc']"
+  },
+  {
+   "check": "get() == B exactly (64 bytes of 0x42)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "v2 present and CURRENT names v2",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "previous version v1 still present",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "no temp files, no open transactions left",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "a further normal put(C) works -> v3",
+   "pass": true,
+   "detail": "v3"
+  },
+  {
+   "check": "CLI put exits with code 4",
+   "pass": true,
+   "detail": "rc=4"
+  },
+  {
+   "check": "CLI prints OUTCOME UNKNOWN",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "CLI get after reopen (recovery) returns exactly B",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "CLI history: v1 and v2 both valid, v2 current",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "SimFS replay: put raised CommitUnknownFsync",
+   "pass": true,
+   "detail": "CommitUnknownFsync"
+  },
+  {
+   "check": "every state recovers to exactly A or exactly B (never mixed, never empty)",
+   "pass": true,
+   "detail": "A=2 B=1"
+  },
+  {
+   "check": "both outcomes really occur (A=2, B=1) -> the outcome IS unknown",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "power cut during recovery -> still only A or B",
+   "pass": true,
+   "detail": "A=2 B=5"
+  },
+  {
+   "check": "after recovery served B, every power-loss state is B (decision made durable)",
+   "pass": true,
+   "detail": "B=1"
+  }
+ ]
+}

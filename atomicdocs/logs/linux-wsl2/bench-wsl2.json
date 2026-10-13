@@ -1,0 +1,8 @@
+{
+ "atomicdocs_1000B_ms": 19.308,
+ "naive_fsync_1000B_ms": 2.559,
+ "naive_nofsync_1000B_ms": 0.114,
+ "atomicdocs_100000B_ms": 19.408,
+ "naive_fsync_100000B_ms": 2.938,
+ "naive_nofsync_100000B_ms": 0.322
+}

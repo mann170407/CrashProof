@@ -1,0 +1,31 @@
+
+Simulated power loss (distinct post-crash disk states; NEW = any newer version)
+ours_W1_small              states=19    OLD=16    NEW=3     CORRUPT=0    ERR=0   acked-lost=0   dead=0
+ours_W0_small              states=23    OLD=17    NEW=6     CORRUPT=0    ERR=0   acked-lost=0   dead=0
+ours_first_put             states=20    OLD=13    NEW=7     CORRUPT=0    ERR=0   acked-lost=0   dead=0
+ours_gc                    states=20    OLD=16    NEW=4     CORRUPT=0    ERR=0   acked-lost=0   dead=0
+ours_two_puts              states=30    OLD=12    NEW=18    CORRUPT=0    ERR=0   acked-lost=0   dead=0
+ours_W1_large              states=121   OLD=118   NEW=3     CORRUPT=0    ERR=0   acked-lost=0   dead=0
+ours_W0_large              states=125   OLD=119   NEW=6     CORRUPT=0    ERR=0   acked-lost=0   dead=0
+naive_nofsync              states=13    OLD=1     NEW=1     CORRUPT=11   ERR=0   acked-lost=12  dead=0
+naive_fsync                states=13    OLD=1     NEW=1     CORRUPT=11   ERR=0   acked-lost=0   dead=0
+
+Process crash, then recovery, then power loss
+  after_begin            served=OLD  states=5    bad=0 changed-after-served=0
+  torn_data              served=OLD  states=6    bad=0 changed-after-served=0
+  before_data_fsync      served=OLD  states=14   bad=0 changed-after-served=0
+  after_data_rename      served=OLD  states=6    bad=0 changed-after-served=0
+  torn_pointer           served=OLD  states=8    bad=0 changed-after-served=0
+  before_pointer_rename  served=OLD  states=8    bad=0 changed-after-served=0
+  after_pointer_rename   served=NEW  states=7    bad=0 changed-after-served=0
+  after_commit           served=NEW  states=5    bad=0 changed-after-served=0
+
+Mutation test: remove one fsync, re-explore
+  without data_fsync       states=75    OLD=72    NEW=3     CORRUPT=0    ERR=0   acked-lost=8   dead=0
+  without data_dirsync     states=27    OLD=24    NEW=3     CORRUPT=0    ERR=0   acked-lost=0   dead=0
+  without ptr_fsync        states=25    OLD=16    NEW=9     CORRUPT=0    ERR=0   acked-lost=0   dead=0
+  without ptr_dirsync      states=23    OLD=20    NEW=3     CORRUPT=0    ERR=0   acked-lost=2   dead=0
+  without journal_fsync    states=49    OLD=42    NEW=7     CORRUPT=0    ERR=0   acked-lost=0   dead=0
+  without data_fsync+no_checksums states=75    OLD=63    NEW=3     CORRUPT=9    ERR=0   acked-lost=5   dead=0
+
+RESULT: PASS - 417 distinct states checked in 41s

@@ -1,0 +1,719 @@
+{
+ "id": "KO-04-C5",
+ "title": "Interrupted recovery",
+ "pass": true,
+ "passed": 142,
+ "total": 142,
+ "checks": [
+  {
+   "check": "S1 reaches exactly ['after tmp unlink', 'after version unlink', 'before checkpoint']",
+   "pass": true,
+   "detail": "observed {'recover_after_tmp_unlink': True, 'recover_after_version_unlink': True, 'recover_after_pointer_rewrite': False, 'recover_before_checkpoint': True}"
+  },
+  {
+   "check": "S2 reaches exactly ['after tmp unlink', 'after version unlink', 'after CURRENT rewrite', 'before checkpoint']",
+   "pass": true,
+   "detail": "observed {'recover_after_tmp_unlink': True, 'recover_after_version_unlink': True, 'recover_after_pointer_rewrite': True, 'recover_before_checkpoint': True}"
+  },
+  {
+   "check": "S3 reaches exactly ['after tmp unlink', 'after CURRENT rewrite', 'before checkpoint']",
+   "pass": true,
+   "detail": "observed {'recover_after_tmp_unlink': True, 'recover_after_version_unlink': False, 'recover_after_pointer_rewrite': True, 'recover_before_checkpoint': True}"
+  },
+  {
+   "check": "every recovery crash point is exercised by some scenario",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S1/after tmp unlink: recovery killed at the crash point (exit 137)",
+   "pass": true,
+   "detail": "exit 137"
+  },
+  {
+   "check": "S1/after tmp unlink: second attempt at the same point finds nothing to redo and converges",
+   "pass": true,
+   "detail": "exit 0"
+  },
+  {
+   "check": "S1/after tmp unlink: accepted v1 (whole, SHA-256 ok) survived the interruptions",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S1/after tmp unlink: rerun 1 -> get() == A exactly",
+   "pass": true,
+   "detail": "64B of 0x41 ('A')"
+  },
+  {
+   "check": "S1/after tmp unlink: rerun 2 -> get() == A exactly",
+   "pass": true,
+   "detail": "64B of 0x41 ('A')"
+  },
+  {
+   "check": "S1/after tmp unlink: only committed versions remain ['v1'] (nothing above v1)",
+   "pass": true,
+   "detail": "on disk: ['v1']"
+  },
+  {
+   "check": "S1/after tmp unlink: no .tmp file anywhere",
+   "pass": true,
+   "detail": "[]"
+  },
+  {
+   "check": "S1/after tmp unlink: CURRENT names v1 and verifies",
+   "pass": true,
+   "detail": "CURRENT -> v1 sha 2b69e227c87d..."
+  },
+  {
+   "check": "S1/after tmp unlink: journal reset (no open BEGIN)",
+   "pass": true,
+   "detail": "status=ok records=0"
+  },
+  {
+   "check": "S1/after tmp unlink: rerun 2 changed nothing (fingerprint rerun1 == rerun2)",
+   "pass": true,
+   "detail": "63ee1529f9bf4350 vs 63ee1529f9bf4350, files ['docs/report/CURRENT', 'docs/report/v000001.dat']"
+  },
+  {
+   "check": "S1/after tmp unlink: rerun 2 report empty (0 tmp, nothing rolled back/forward)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S1/after tmp unlink: converged to the same disk as an uninterrupted recovery",
+   "pass": true,
+   "detail": "63ee1529f9bf4350 vs reference 63ee1529f9bf4350"
+  },
+  {
+   "check": "S1/after version unlink: recovery killed at the crash point (exit 137)",
+   "pass": true,
+   "detail": "exit 137"
+  },
+  {
+   "check": "S1/after version unlink: second attempt at the same point finds nothing to redo and converges",
+   "pass": true,
+   "detail": "exit 0"
+  },
+  {
+   "check": "S1/after version unlink: accepted v1 (whole, SHA-256 ok) survived the interruptions",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S1/after version unlink: rerun 1 -> get() == A exactly",
+   "pass": true,
+   "detail": "64B of 0x41 ('A')"
+  },
+  {
+   "check": "S1/after version unlink: rerun 2 -> get() == A exactly",
+   "pass": true,
+   "detail": "64B of 0x41 ('A')"
+  },
+  {
+   "check": "S1/after version unlink: only committed versions remain ['v1'] (nothing above v1)",
+   "pass": true,
+   "detail": "on disk: ['v1']"
+  },
+  {
+   "check": "S1/after version unlink: no .tmp file anywhere",
+   "pass": true,
+   "detail": "[]"
+  },
+  {
+   "check": "S1/after version unlink: CURRENT names v1 and verifies",
+   "pass": true,
+   "detail": "CURRENT -> v1 sha 2b69e227c87d..."
+  },
+  {
+   "check": "S1/after version unlink: journal reset (no open BEGIN)",
+   "pass": true,
+   "detail": "status=ok records=0"
+  },
+  {
+   "check": "S1/after version unlink: rerun 2 changed nothing (fingerprint rerun1 == rerun2)",
+   "pass": true,
+   "detail": "63ee1529f9bf4350 vs 63ee1529f9bf4350, files ['docs/report/CURRENT', 'docs/report/v000001.dat']"
+  },
+  {
+   "check": "S1/after version unlink: rerun 2 report empty (0 tmp, nothing rolled back/forward)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S1/after version unlink: converged to the same disk as an uninterrupted recovery",
+   "pass": true,
+   "detail": "63ee1529f9bf4350 vs reference 63ee1529f9bf4350"
+  },
+  {
+   "check": "S1/before checkpoint: recovery killed at the crash point (exit 137)",
+   "pass": true,
+   "detail": "exit 137"
+  },
+  {
+   "check": "S1/before checkpoint: killed again at the same point (exit 137)",
+   "pass": true,
+   "detail": "exit 137"
+  },
+  {
+   "check": "S1/before checkpoint: accepted v1 (whole, SHA-256 ok) survived the interruptions",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S1/before checkpoint: rerun 1 -> get() == A exactly",
+   "pass": true,
+   "detail": "64B of 0x41 ('A')"
+  },
+  {
+   "check": "S1/before checkpoint: rerun 2 -> get() == A exactly",
+   "pass": true,
+   "detail": "64B of 0x41 ('A')"
+  },
+  {
+   "check": "S1/before checkpoint: only committed versions remain ['v1'] (nothing above v1)",
+   "pass": true,
+   "detail": "on disk: ['v1']"
+  },
+  {
+   "check": "S1/before checkpoint: no .tmp file anywhere",
+   "pass": true,
+   "detail": "[]"
+  },
+  {
+   "check": "S1/before checkpoint: CURRENT names v1 and verifies",
+   "pass": true,
+   "detail": "CURRENT -> v1 sha 2b69e227c87d..."
+  },
+  {
+   "check": "S1/before checkpoint: journal reset (no open BEGIN)",
+   "pass": true,
+   "detail": "status=ok records=0"
+  },
+  {
+   "check": "S1/before checkpoint: rerun 2 changed nothing (fingerprint rerun1 == rerun2)",
+   "pass": true,
+   "detail": "63ee1529f9bf4350 vs 63ee1529f9bf4350, files ['docs/report/CURRENT', 'docs/report/v000001.dat']"
+  },
+  {
+   "check": "S1/before checkpoint: rerun 2 report empty (0 tmp, nothing rolled back/forward)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S1/before checkpoint: converged to the same disk as an uninterrupted recovery",
+   "pass": true,
+   "detail": "63ee1529f9bf4350 vs reference 63ee1529f9bf4350"
+  },
+  {
+   "check": "S2/after tmp unlink: recovery killed at the crash point (exit 137)",
+   "pass": true,
+   "detail": "exit 137"
+  },
+  {
+   "check": "S2/after tmp unlink: second attempt at the same point finds nothing to redo and converges",
+   "pass": true,
+   "detail": "exit 0"
+  },
+  {
+   "check": "S2/after tmp unlink: accepted v1 (whole, SHA-256 ok) survived the interruptions",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S2/after tmp unlink: rerun 1 -> get() == A exactly",
+   "pass": true,
+   "detail": "64B of 0x41 ('A')"
+  },
+  {
+   "check": "S2/after tmp unlink: rerun 2 -> get() == A exactly",
+   "pass": true,
+   "detail": "64B of 0x41 ('A')"
+  },
+  {
+   "check": "S2/after tmp unlink: only committed versions remain ['v1'] (nothing above v1)",
+   "pass": true,
+   "detail": "on disk: ['v1']"
+  },
+  {
+   "check": "S2/after tmp unlink: no .tmp file anywhere",
+   "pass": true,
+   "detail": "[]"
+  },
+  {
+   "check": "S2/after tmp unlink: CURRENT names v1 and verifies",
+   "pass": true,
+   "detail": "CURRENT -> v1 sha 2b69e227c87d..."
+  },
+  {
+   "check": "S2/after tmp unlink: journal reset (no open BEGIN)",
+   "pass": true,
+   "detail": "status=ok records=0"
+  },
+  {
+   "check": "S2/after tmp unlink: rerun 2 changed nothing (fingerprint rerun1 == rerun2)",
+   "pass": true,
+   "detail": "63ee1529f9bf4350 vs 63ee1529f9bf4350, files ['docs/report/CURRENT', 'docs/report/v000001.dat']"
+  },
+  {
+   "check": "S2/after tmp unlink: rerun 2 report empty (0 tmp, nothing rolled back/forward)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S2/after tmp unlink: converged to the same disk as an uninterrupted recovery",
+   "pass": true,
+   "detail": "63ee1529f9bf4350 vs reference 63ee1529f9bf4350"
+  },
+  {
+   "check": "S2/after version unlink: recovery killed at the crash point (exit 137)",
+   "pass": true,
+   "detail": "exit 137"
+  },
+  {
+   "check": "S2/after version unlink: second attempt at the same point finds nothing to redo and converges",
+   "pass": true,
+   "detail": "exit 0"
+  },
+  {
+   "check": "S2/after version unlink: accepted v1 (whole, SHA-256 ok) survived the interruptions",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S2/after version unlink: rerun 1 -> get() == A exactly",
+   "pass": true,
+   "detail": "64B of 0x41 ('A')"
+  },
+  {
+   "check": "S2/after version unlink: rerun 2 -> get() == A exactly",
+   "pass": true,
+   "detail": "64B of 0x41 ('A')"
+  },
+  {
+   "check": "S2/after version unlink: only committed versions remain ['v1'] (nothing above v1)",
+   "pass": true,
+   "detail": "on disk: ['v1']"
+  },
+  {
+   "check": "S2/after version unlink: no .tmp file anywhere",
+   "pass": true,
+   "detail": "[]"
+  },
+  {
+   "check": "S2/after version unlink: CURRENT names v1 and verifies",
+   "pass": true,
+   "detail": "CURRENT -> v1 sha 2b69e227c87d..."
+  },
+  {
+   "check": "S2/after version unlink: journal reset (no open BEGIN)",
+   "pass": true,
+   "detail": "status=ok records=0"
+  },
+  {
+   "check": "S2/after version unlink: rerun 2 changed nothing (fingerprint rerun1 == rerun2)",
+   "pass": true,
+   "detail": "63ee1529f9bf4350 vs 63ee1529f9bf4350, files ['docs/report/CURRENT', 'docs/report/v000001.dat']"
+  },
+  {
+   "check": "S2/after version unlink: rerun 2 report empty (0 tmp, nothing rolled back/forward)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S2/after version unlink: converged to the same disk as an uninterrupted recovery",
+   "pass": true,
+   "detail": "63ee1529f9bf4350 vs reference 63ee1529f9bf4350"
+  },
+  {
+   "check": "S2/after CURRENT rewrite: recovery killed at the crash point (exit 137)",
+   "pass": true,
+   "detail": "exit 137"
+  },
+  {
+   "check": "S2/after CURRENT rewrite: second attempt at the same point finds nothing to redo and converges",
+   "pass": true,
+   "detail": "exit 0"
+  },
+  {
+   "check": "S2/after CURRENT rewrite: accepted v1 (whole, SHA-256 ok) survived the interruptions",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S2/after CURRENT rewrite: rerun 1 -> get() == A exactly",
+   "pass": true,
+   "detail": "64B of 0x41 ('A')"
+  },
+  {
+   "check": "S2/after CURRENT rewrite: rerun 2 -> get() == A exactly",
+   "pass": true,
+   "detail": "64B of 0x41 ('A')"
+  },
+  {
+   "check": "S2/after CURRENT rewrite: only committed versions remain ['v1'] (nothing above v1)",
+   "pass": true,
+   "detail": "on disk: ['v1']"
+  },
+  {
+   "check": "S2/after CURRENT rewrite: no .tmp file anywhere",
+   "pass": true,
+   "detail": "[]"
+  },
+  {
+   "check": "S2/after CURRENT rewrite: CURRENT names v1 and verifies",
+   "pass": true,
+   "detail": "CURRENT -> v1 sha 2b69e227c87d..."
+  },
+  {
+   "check": "S2/after CURRENT rewrite: journal reset (no open BEGIN)",
+   "pass": true,
+   "detail": "status=ok records=0"
+  },
+  {
+   "check": "S2/after CURRENT rewrite: rerun 2 changed nothing (fingerprint rerun1 == rerun2)",
+   "pass": true,
+   "detail": "63ee1529f9bf4350 vs 63ee1529f9bf4350, files ['docs/report/CURRENT', 'docs/report/v000001.dat']"
+  },
+  {
+   "check": "S2/after CURRENT rewrite: rerun 2 report empty (0 tmp, nothing rolled back/forward)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S2/after CURRENT rewrite: converged to the same disk as an uninterrupted recovery",
+   "pass": true,
+   "detail": "63ee1529f9bf4350 vs reference 63ee1529f9bf4350"
+  },
+  {
+   "check": "S2/before checkpoint: recovery killed at the crash point (exit 137)",
+   "pass": true,
+   "detail": "exit 137"
+  },
+  {
+   "check": "S2/before checkpoint: killed again at the same point (exit 137)",
+   "pass": true,
+   "detail": "exit 137"
+  },
+  {
+   "check": "S2/before checkpoint: accepted v1 (whole, SHA-256 ok) survived the interruptions",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S2/before checkpoint: rerun 1 -> get() == A exactly",
+   "pass": true,
+   "detail": "64B of 0x41 ('A')"
+  },
+  {
+   "check": "S2/before checkpoint: rerun 2 -> get() == A exactly",
+   "pass": true,
+   "detail": "64B of 0x41 ('A')"
+  },
+  {
+   "check": "S2/before checkpoint: only committed versions remain ['v1'] (nothing above v1)",
+   "pass": true,
+   "detail": "on disk: ['v1']"
+  },
+  {
+   "check": "S2/before checkpoint: no .tmp file anywhere",
+   "pass": true,
+   "detail": "[]"
+  },
+  {
+   "check": "S2/before checkpoint: CURRENT names v1 and verifies",
+   "pass": true,
+   "detail": "CURRENT -> v1 sha 2b69e227c87d..."
+  },
+  {
+   "check": "S2/before checkpoint: journal reset (no open BEGIN)",
+   "pass": true,
+   "detail": "status=ok records=0"
+  },
+  {
+   "check": "S2/before checkpoint: rerun 2 changed nothing (fingerprint rerun1 == rerun2)",
+   "pass": true,
+   "detail": "63ee1529f9bf4350 vs 63ee1529f9bf4350, files ['docs/report/CURRENT', 'docs/report/v000001.dat']"
+  },
+  {
+   "check": "S2/before checkpoint: rerun 2 report empty (0 tmp, nothing rolled back/forward)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S2/before checkpoint: converged to the same disk as an uninterrupted recovery",
+   "pass": true,
+   "detail": "63ee1529f9bf4350 vs reference 63ee1529f9bf4350"
+  },
+  {
+   "check": "S3/after tmp unlink: recovery killed at the crash point (exit 137)",
+   "pass": true,
+   "detail": "exit 137"
+  },
+  {
+   "check": "S3/after tmp unlink: second attempt at the same point finds nothing to redo and converges",
+   "pass": true,
+   "detail": "exit 0"
+  },
+  {
+   "check": "S3/after tmp unlink: accepted v2 (whole, SHA-256 ok) survived the interruptions",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S3/after tmp unlink: rerun 1 -> get() == B exactly",
+   "pass": true,
+   "detail": "64B of 0x42 ('B')"
+  },
+  {
+   "check": "S3/after tmp unlink: rerun 2 -> get() == B exactly",
+   "pass": true,
+   "detail": "64B of 0x42 ('B')"
+  },
+  {
+   "check": "S3/after tmp unlink: only committed versions remain ['v1', 'v2'] (nothing above v2)",
+   "pass": true,
+   "detail": "on disk: ['v1', 'v2']"
+  },
+  {
+   "check": "S3/after tmp unlink: no .tmp file anywhere",
+   "pass": true,
+   "detail": "[]"
+  },
+  {
+   "check": "S3/after tmp unlink: CURRENT names v2 and verifies",
+   "pass": true,
+   "detail": "CURRENT -> v2 sha 0783e4b7831c..."
+  },
+  {
+   "check": "S3/after tmp unlink: journal reset (no open BEGIN)",
+   "pass": true,
+   "detail": "status=ok records=0"
+  },
+  {
+   "check": "S3/after tmp unlink: rerun 2 changed nothing (fingerprint rerun1 == rerun2)",
+   "pass": true,
+   "detail": "a1a523c1dd94bf69 vs a1a523c1dd94bf69, files ['docs/report/CURRENT', 'docs/report/v000001.dat', 'docs/report/v000002.dat']"
+  },
+  {
+   "check": "S3/after tmp unlink: rerun 2 report empty (0 tmp, nothing rolled back/forward)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S3/after tmp unlink: converged to the same disk as an uninterrupted recovery",
+   "pass": true,
+   "detail": "a1a523c1dd94bf69 vs reference a1a523c1dd94bf69"
+  },
+  {
+   "check": "S3/after CURRENT rewrite: recovery killed at the crash point (exit 137)",
+   "pass": true,
+   "detail": "exit 137"
+  },
+  {
+   "check": "S3/after CURRENT rewrite: second attempt at the same point finds nothing to redo and converges",
+   "pass": true,
+   "detail": "exit 0"
+  },
+  {
+   "check": "S3/after CURRENT rewrite: accepted v2 (whole, SHA-256 ok) survived the interruptions",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S3/after CURRENT rewrite: rerun 1 -> get() == B exactly",
+   "pass": true,
+   "detail": "64B of 0x42 ('B')"
+  },
+  {
+   "check": "S3/after CURRENT rewrite: rerun 2 -> get() == B exactly",
+   "pass": true,
+   "detail": "64B of 0x42 ('B')"
+  },
+  {
+   "check": "S3/after CURRENT rewrite: only committed versions remain ['v1', 'v2'] (nothing above v2)",
+   "pass": true,
+   "detail": "on disk: ['v1', 'v2']"
+  },
+  {
+   "check": "S3/after CURRENT rewrite: no .tmp file anywhere",
+   "pass": true,
+   "detail": "[]"
+  },
+  {
+   "check": "S3/after CURRENT rewrite: CURRENT names v2 and verifies",
+   "pass": true,
+   "detail": "CURRENT -> v2 sha 0783e4b7831c..."
+  },
+  {
+   "check": "S3/after CURRENT rewrite: journal reset (no open BEGIN)",
+   "pass": true,
+   "detail": "status=ok records=0"
+  },
+  {
+   "check": "S3/after CURRENT rewrite: rerun 2 changed nothing (fingerprint rerun1 == rerun2)",
+   "pass": true,
+   "detail": "a1a523c1dd94bf69 vs a1a523c1dd94bf69, files ['docs/report/CURRENT', 'docs/report/v000001.dat', 'docs/report/v000002.dat']"
+  },
+  {
+   "check": "S3/after CURRENT rewrite: rerun 2 report empty (0 tmp, nothing rolled back/forward)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S3/after CURRENT rewrite: converged to the same disk as an uninterrupted recovery",
+   "pass": true,
+   "detail": "a1a523c1dd94bf69 vs reference a1a523c1dd94bf69"
+  },
+  {
+   "check": "S3/before checkpoint: recovery killed at the crash point (exit 137)",
+   "pass": true,
+   "detail": "exit 137"
+  },
+  {
+   "check": "S3/before checkpoint: killed again at the same point (exit 137)",
+   "pass": true,
+   "detail": "exit 137"
+  },
+  {
+   "check": "S3/before checkpoint: accepted v2 (whole, SHA-256 ok) survived the interruptions",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S3/before checkpoint: rerun 1 -> get() == B exactly",
+   "pass": true,
+   "detail": "64B of 0x42 ('B')"
+  },
+  {
+   "check": "S3/before checkpoint: rerun 2 -> get() == B exactly",
+   "pass": true,
+   "detail": "64B of 0x42 ('B')"
+  },
+  {
+   "check": "S3/before checkpoint: only committed versions remain ['v1', 'v2'] (nothing above v2)",
+   "pass": true,
+   "detail": "on disk: ['v1', 'v2']"
+  },
+  {
+   "check": "S3/before checkpoint: no .tmp file anywhere",
+   "pass": true,
+   "detail": "[]"
+  },
+  {
+   "check": "S3/before checkpoint: CURRENT names v2 and verifies",
+   "pass": true,
+   "detail": "CURRENT -> v2 sha 0783e4b7831c..."
+  },
+  {
+   "check": "S3/before checkpoint: journal reset (no open BEGIN)",
+   "pass": true,
+   "detail": "status=ok records=0"
+  },
+  {
+   "check": "S3/before checkpoint: rerun 2 changed nothing (fingerprint rerun1 == rerun2)",
+   "pass": true,
+   "detail": "a1a523c1dd94bf69 vs a1a523c1dd94bf69, files ['docs/report/CURRENT', 'docs/report/v000001.dat', 'docs/report/v000002.dat']"
+  },
+  {
+   "check": "S3/before checkpoint: rerun 2 report empty (0 tmp, nothing rolled back/forward)",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "S3/before checkpoint: converged to the same disk as an uninterrupted recovery",
+   "pass": true,
+   "detail": "a1a523c1dd94bf69 vs reference a1a523c1dd94bf69"
+  },
+  {
+   "check": "A2 S1/after tmp unlink: killed at the SAME point twice in a row",
+   "pass": true,
+   "detail": "exits [137, 137]"
+  },
+  {
+   "check": "A2 S1/after tmp unlink: both documents == A, CURRENT -> v1 verifies, no tmp",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "A2 S1/after tmp unlink: rerun 2 changed nothing and converged to the uninterrupted result",
+   "pass": true,
+   "detail": "14da2bd123f02ffe / 14da2bd123f02ffe / ref 14da2bd123f02ffe"
+  },
+  {
+   "check": "A2 S1/after version unlink: killed at the SAME point twice in a row",
+   "pass": true,
+   "detail": "exits [137, 137]"
+  },
+  {
+   "check": "A2 S1/after version unlink: both documents == A, CURRENT -> v1 verifies, no tmp",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "A2 S1/after version unlink: rerun 2 changed nothing and converged to the uninterrupted result",
+   "pass": true,
+   "detail": "14da2bd123f02ffe / 14da2bd123f02ffe / ref 14da2bd123f02ffe"
+  },
+  {
+   "check": "A2 S2/after CURRENT rewrite: killed at the SAME point twice in a row",
+   "pass": true,
+   "detail": "exits [137, 137]"
+  },
+  {
+   "check": "A2 S2/after CURRENT rewrite: both documents == A, CURRENT -> v1 verifies, no tmp",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "A2 S2/after CURRENT rewrite: rerun 2 changed nothing and converged to the uninterrupted result",
+   "pass": true,
+   "detail": "14da2bd123f02ffe / 14da2bd123f02ffe / ref 14da2bd123f02ffe"
+  },
+  {
+   "check": "A2 S1/before checkpoint: killed at the SAME point twice in a row",
+   "pass": true,
+   "detail": "exits [137, 137]"
+  },
+  {
+   "check": "A2 S1/before checkpoint: both documents == A, CURRENT -> v1 verifies, no tmp",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "A2 S1/before checkpoint: rerun 2 changed nothing and converged to the uninterrupted result",
+   "pass": true,
+   "detail": "14da2bd123f02ffe / 14da2bd123f02ffe / ref 14da2bd123f02ffe"
+  },
+  {
+   "check": "A2 S3/after CURRENT rewrite: killed at the SAME point twice in a row",
+   "pass": true,
+   "detail": "exits [137, 137]"
+  },
+  {
+   "check": "A2 S3/after CURRENT rewrite: both documents == B, CURRENT -> v2 verifies, no tmp",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "check": "A2 S3/after CURRENT rewrite: rerun 2 changed nothing and converged to the uninterrupted result",
+   "pass": true,
+   "detail": "9dec3301c84ef08d / 9dec3301c84ef08d / ref 9dec3301c84ef08d"
+  },
+  {
+   "check": "B S1: every power-loss state during recovery -> A exactly, no tmp, rerun changes nothing",
+   "pass": true,
+   "detail": "24 distinct states, 0 bad"
+  },
+  {
+   "check": "B S2: every power-loss state during recovery -> A exactly, no tmp, rerun changes nothing",
+   "pass": true,
+   "detail": "88 distinct states, 0 bad"
+  },
+  {
+   "check": "B S3: every power-loss state during recovery -> B exactly, no tmp, rerun changes nothing",
+   "pass": true,
+   "detail": "48 distinct states, 0 bad"
+  }
+ ]
+}
